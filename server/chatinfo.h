@@ -1,3 +1,5 @@
+#ifndef chatinfo_h
+#define chatinfo_h
 #include <vector>
 
 typedef struct member {
@@ -11,3 +13,4 @@ typedef struct group {
 	vector <member> members;
 
 } group;
+#endif
