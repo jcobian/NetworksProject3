@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <sstream>
 #include "../chatinfo.h"
-//#define DEBUG
+#define DEBUG
 
 using namespace std;
 
@@ -71,17 +71,29 @@ int main(int argc, char**argv)
 		ibytes = 0;
 		obytes = 0;
 		memset((char*)&messageType,0,sizeof(messageType));
+		#ifdef DEBUG
+			printf("About to receive message type");
+		#endif
 		if((ibytes=recvfrom(sockfd,&messageType,sizeof(messageType),0,(struct sockaddr *)&clientaddr,&len))==-1) {
 			perror("Client-recvfrom() error");
 			exit(1);
 		}
+		#ifdef DEBUG
+			printf("Received: %c\n",messageType);	
+		#endif
 		//list
 		if(messageType == 'L') {
 				char sendBack = 'G';
+				#ifdef DEBUG
+					printf("About to send message type");
+				#endif
 				if((obytes=sendto(sockfd,&sendBack,1,0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
 					perror("client-sendto error");
 					exit(1);
 				}
+				#ifdef DEBUG
+					printf("Sent: %c\n",sendBack);	
+				#endif
 				char *groupNames;
 				size_t i;
 				for(i=0;i<activeGroups.size();i++) {
@@ -90,12 +102,15 @@ int main(int argc, char**argv)
 				}
 				strcat(groupNames,":");
 				#ifdef DEBUG
-					printf("Groups: %s\n",groupNames);
+					printf("About to send group names");
 				#endif
 				if((obytes=sendto(sockfd,groupNames,sizeof(groupNames),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
 					perror("client-sendto error");
 					exit(1);
 				}
+				#ifdef DEBUG
+					printf("Sent Groups: %s\n",groupNames);
+				#endif
 						
 		}
 		else if (messageType == 'J') {
@@ -106,6 +121,9 @@ int main(int argc, char**argv)
 				perror("Client-recvfrom() error");
 				exit(1);
 			}
+			#ifdef DEBUG
+				printf("Receive: %s\n",inbuffer);
+			#endif
 			char *pch = strtok(inbuffer,":");
 			char *groupName;
 			strcpy(groupName,pch);
