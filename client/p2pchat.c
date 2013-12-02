@@ -31,7 +31,6 @@ int main(int argc, char **argv)
 	}
 
 	char errorLogFile[1024] = "./logs/p2p_error_log";
-
 	FILE *fpError = fopen(errorLogFile,"a");
 	if(fpError==NULL)
 	{
@@ -41,14 +40,14 @@ int main(int argc, char **argv)
 
 	int sockfd, n;
 	struct sockaddr_in servaddr;
-	
-	//ip address where server is
-	char* ap_addr = argv[1];
-	//char *ap_addr = "123.4.5.6";
-	char* port = "9768";
+
+	//set up ports and ip based on user input
+	char* pch = argv[1];
+	char* ap_addr = strtok (pch,":");
+    char* port = strtok(NULL, "");
 
 	//create the socket
-    sockfd=socket(AF_INET,SOCK_STREAM,0);
+    sockfd=socket(AF_INET,SOCK_DGRAM,0);
     if(sockfd < 0) {
 		writeErrorLog(fpError,"Error opening socket");
 		perror("ERROR opening socket");
@@ -61,16 +60,41 @@ int main(int argc, char **argv)
     servaddr.sin_addr.s_addr=inet_addr(ap_addr); //the address
     servaddr.sin_port=htons(atoi(port)); //the port
 
-	//connect
-	/*
-    if(connect(sockfd,(struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
-	writeErrorLog(fpError,"Error connecting");
-        perror("ERROR connecting");
-	exit(1);
+
+	printf("Welcome to the P2P Client\n");
+	printf("Connecting to %s:%s\n", ap_addr, port);
+
+	char sendline[1024];
+
+	printf("Command: ");
+	scanf("%s",sendline);
+
+	//send command
+    if(sendto(sockfd,sendline, strlen(sendline),0,(struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
+		writeErrorLog(fpError,"Error sending");
+		perror("ERROR connecting");
+		exit(1);
     }
 
-	*/
-	
+	//receive message type
+	char recvline[1024];
+	int len = sizeof(servaddr);
+    if(recvfrom(sockfd,recvline, strlen(recvline),0,(struct sockaddr *) &servaddr, &len) < 0) {
+		writeErrorLog(fpError,"Error receiving");
+		perror("ERROR connecting");
+		exit(1);
+    }
+
+	printf("%s\n",recvline);
+	//receive actual message	
+    if(recvfrom(sockfd,recvline, strlen(recvline),0,(struct sockaddr *) &servaddr, &len) < 0) {
+		writeErrorLog(fpError,"Error receiving");
+		perror("ERROR connecting");
+		exit(1);
+    }
+
+	printf("%s\n",recvline);
+
 	close(sockfd);
 	fclose(fpError);
 	return 0;
