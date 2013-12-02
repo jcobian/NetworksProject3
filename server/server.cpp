@@ -20,64 +20,37 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <sstream>
-
+#include "../chatinfo.h"
 //#define DEBUG
 
 using namespace std;
 
-pthread_mutex_t server_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-//holds data passed from main to thread
-typedef struct {
-	int connfd;
-	struct sockaddr_in cliaddr;
-	socklen_t clilen;
-
-} thread_info;
-
-
-
-//function run by thread upon accepting a new client connection
-void *accept_client(void *input) {
-
-	thread_info* info = (thread_info*)input;
-	#ifdef DEBUG
-	printf("New client accepted!\n");
-	printf("\tNew client address:%s\n",inet_ntoa(info->cliaddr.sin_addr));
-	printf("\tClient port:%d\n",info->cliaddr.sin_port);
-	#endif
-	////////////////////////////////////
-	// Receive Server reply
-	//
-
-
-
-	close(info->connfd);
-
-	return 0;
-}
-
 int main(int argc, char**argv)
 {
+
+	if(argc !=2 ) {
+		printf("usage: ./server <port number>\n");
+		exit(1);
+	}
+	int portNumber = atoi(argv[1]);
+	printf("Connecting on port %d\n",portNumber);
 	////////////////////////////////////
 	// Setup and Connection 
 	// 
 	int sockfd;
-	struct sockaddr_in servaddr;
+	struct sockaddr_in servaddr,clientaddr;
 
 	//create the socket
-	sockfd=socket(AF_INET,SOCK_STREAM,0);
+	sockfd=socket(AF_INET,SOCK_DGRAM,0);
 	if(sockfd < 0) {
 		perror("ERROR opening socket");
 		exit(1);
 	}
-
 	//build server inet address
 	bzero(&servaddr,sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr=htonl(INADDR_ANY);
-	int s_port = 9768;
-	servaddr.sin_port=htons(s_port);
+	servaddr.sin_port=htons(portNumber);
 
 	int val = 1;
 	if(	setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val))==-1) {
@@ -90,34 +63,101 @@ int main(int argc, char**argv)
 		perror("bind failed");
 		exit(1);
 	}
-	if(	listen(sockfd,1024) <0 ) {
-		perror("listen failed");
-		exit(1);
-	}
-
-	////////////////////////////////////
-	// Listen to Port
-	// 
-	
+	socklen_t len = sizeof clientaddr;
+	char messageType;
+	int ibytes,obytes;
+	vector<group> activeGroups;	
 	while(1) {
-		thread_info info;
-		info.clilen = sizeof(info.cliaddr);
-		info.connfd = accept(sockfd,(struct sockaddr *)&info.cliaddr,&info.clilen);
-
-		//spawn a new thread to handle the connection
-		pthread_t thread;
-		int status = pthread_create(&thread, NULL, accept_client, &info);
-
-		if(status){
-			#ifdef DEBUG 
-			printf("error creating thread: %i\n", status);
-			#endif
-			exit(1);	
+		ibytes = 0;
+		obytes = 0;
+		memset((char*)&messageType,0,sizeof(messageType));
+		if((ibytes=recvfrom(sockfd,&messageType,sizeof(messageType),0,(struct sockaddr *)&clientaddr,&len))==-1) {
+			perror("Client-recvfrom() error");
+			exit(1);
 		}
-		else{
+		//list
+		if(messageType == 'L') {
+				char sendBack = 'G';
+				if((obytes=sendto(sockfd,&sendBack,1,0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+					perror("client-sendto error");
+					exit(1);
+				}
+				char *groupNames;
+				size_t i;
+				for(i=0;i<activeGroups.size();i++) {
+					strcat(groupNames,activeGroups[i].groupName);
+					strcat(groupNames,":");
+				}
+				strcat(groupNames,":");
+				#ifdef DEBUG
+					printf("Groups: %s\n",groupNames);
+				#endif
+				if((obytes=sendto(sockfd,groupNames,sizeof(groupNames),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+					perror("client-sendto error");
+					exit(1);
+				}
+						
+		}
+		else if (messageType == 'J') {
+			//join
+			char inbuffer[4096];
+			memset((char*)&inbuffer,0,sizeof(inbuffer));
+			if((ibytes=recvfrom(sockfd,inbuffer,sizeof(inbuffer),0,(struct sockaddr *)&clientaddr,&len))==-1) {
+				perror("Client-recvfrom() error");
+				exit(1);
+			}
+			char *pch = strtok(inbuffer,":");
+			char *groupName;
+			strcpy(groupName,pch);
+			char *userName;
+			pch = strtok(NULL,":");
+			strcpy(userName,pch);
 			#ifdef DEBUG
-			printf("Thread created\n");
+				printf("Join: group name is %s, username is %s\n",groupName,userName);
 			#endif
+			char messageSuccess='S';
+			if(strlen(groupName)==0 || strlen(userName)==0) {
+				messageSuccess='F';
+			}
+			else {
+			//check if group name exists
+			size_t i;
+			int foundGroup = 0; //boolean 0 if the group is not found, 1 if it is
+			int groupIndex; //the index of what group the member should be added to
+			member newMember;
+			strcpy(newMember.name,userName);
+			strcpy(newMember.ipAddress,inet_ntoa(clientaddr.sin_addr));
+			for(i=0;i<activeGroups.size();i++) {
+				//success 
+				if(strcmp(groupName,activeGroups[i].groupName)==0) {
+					foundGroup = 1;
+					groupIndex = i;
+					break;
+				}
+				
+				
+			}
+			//send the message success status
+			if((obytes=sendto(sockfd,&messageSuccess,1,0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+				perror("client-sendto error");
+				exit(1);
+			}
+			if(foundGroup) {
+				//add the newMember to the group
+				activeGroups[groupIndex].members.push_back(newMember);
+			}else {
+				///create a new group
+				group newGroup;
+				strcpy(newGroup.groupName,groupName);
+				newGroup.members.push_back(newMember);	
+
+			}
+			}//ends else when group and username actually have a length
+		} //ends if message is join
+			
+		if(close(sockfd) !=0) {
+			perror("client-sockfd closing failed");
+			exit(1);
 		}
 	}
 }
