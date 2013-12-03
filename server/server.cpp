@@ -71,15 +71,18 @@ int main(int argc, char**argv)
 		ibytes = 0;
 		obytes = 0;
 		memset((char*)&messageType,0,sizeof(messageType));
+
+		bzero(&clientaddr, len);
+
 		#ifdef DEBUG
 			printf("About to receive message type\n");
 		#endif
-		if((ibytes=recvfrom(sockfd,messageType,sizeof(messageType),0,(struct sockaddr *)&clientaddr,&len))==-1) {
+		if((recvfrom(sockfd,messageType,sizeof(messageType),0,(struct sockaddr *)&clientaddr,&len) < 0)) {
 			perror("Client-recvfrom() error");
 			exit(1);
 		}
 		#ifdef DEBUG
-			printf("Received: %s\n",messageType);	
+			printf("Received: -%s-\n",messageType);	
 		#endif
 		//list
 		if(strcmp(messageType,"L")==0) {
@@ -196,9 +199,9 @@ int main(int argc, char**argv)
 			}//ends else when group and username actually have a length
 		} //ends if message is join
 			
-		if(close(sockfd) !=0) {
+/*		if(close(sockfd) !=0) {
 			perror("client-sockfd closing failed");
 			exit(1);
-		}
+		}*/
 	}
 }

@@ -71,7 +71,7 @@ int main(int argc, char **argv)
 
 	if(strcmp(sendline, "list") == 0) {
 		//send command
-		if(sendto(sockfd,"L", strlen("L"),0,(struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
+		if(sendto(sockfd,"L", 2,0,(struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
 			writeErrorLog(fpError,"Error sending");
 			perror("ERROR connecting");
 			exit(1);
