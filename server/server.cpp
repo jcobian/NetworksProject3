@@ -67,6 +67,15 @@ int main(int argc, char**argv)
 	char messageType[2];
 	int ibytes,obytes;
 	vector<group> activeGroups;	
+	
+	#ifdef DEBUG
+		group newGroup;
+		newGroup.groupName = "Irish";
+		activeGroups.push_back(newGroup);
+		group newGroup2;
+		newGroup2.groupName = "Gold";
+		activeGroups.push_back(newGroup2);
+	#endif
 	while(1) {
 		ibytes = 0;
 		obytes = 0;
@@ -74,32 +83,21 @@ int main(int argc, char**argv)
 
 		bzero(&clientaddr, len);
 
-		#ifdef DEBUG
-			printf("About to receive message type\n");
-		#endif
 		if((recvfrom(sockfd,messageType,sizeof(messageType),0,(struct sockaddr *)&clientaddr,&len) < 0)) {
 			perror("Client-recvfrom() error");
 			exit(1);
 		}
-		#ifdef DEBUG
-			printf("Received: %s\n",messageType);	
-		#endif
 		//list
 		if(strcmp(messageType,"L")==0) {
 				char sendBack[2];
 				strcpy(sendBack,"G");
-				#ifdef DEBUG
-					printf("About to send message type: %s\n",sendBack);
-				#endif
 				if((obytes=sendto(sockfd,sendBack,strlen(sendBack),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
 					perror("client-sendto error");
 					exit(1);
 				}
-				#ifdef DEBUG
-					printf("Sent: %s\n",sendBack);	
-				#endif
 				size_t i;
 				char tempName[1024];
+				bzero(&tempName, sizeof(tempName));
 			
 				#ifdef DEBUG
 					printf("Sending group names\n");
@@ -114,28 +112,18 @@ int main(int argc, char**argv)
 						perror("client-sendto error");
 						exit(1);
 					}
-					#ifdef DEBUG
-						printf("Sent: %s\n",colons);
-					#endif
 				} else {
-					#ifdef DEBUG
-						printf("There are %d active groups\n",(int)activeGroups.size());
-					#endif
-				for(i=0;i<activeGroups.size();i++) {
-					strcpy(tempName,activeGroups[i].groupName);
-					strcat(tempName,":");
-					if(i==activeGroups.size()-1) {
+					for(i=0;i<activeGroups.size();i++) {
+						strcat(tempName,activeGroups[i].groupName);
 						strcat(tempName,":");
+						if(i==activeGroups.size()-1) {
+							strcat(tempName,":");
+						}
 					}
-					if((obytes=sendto(sockfd,tempName,strlen(tempName),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
-						perror("client-sendto error");
-						exit(1);
-					}
-					#ifdef DEBUG
-						printf("%s",tempName);
-					#endif
-
 				}
+				if((obytes=sendto(sockfd,tempName,strlen(tempName),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+					perror("client-sendto error");
+					exit(1);
 				}
 						
 		}

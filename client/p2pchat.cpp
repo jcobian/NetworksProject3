@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <string>
 #include <iostream>
+#include <sstream>
 #include <strings.h>
 #include <cstring>
 #include <errno.h>
@@ -23,6 +24,37 @@
 //#define DEBUG
 
 using namespace std;
+
+
+void joinList(int sockfd, struct sockaddr_in * servaddr, int servlen, string listName, string userName)
+{
+	//send command
+	if(sendto(sockfd,"J", 2,0, (struct sockaddr *) servaddr, servlen) < 0) {
+		perror("ERROR connecting");
+		exit(1);
+	}
+
+	listName += ":";
+	if(sendto(sockfd,listName.c_str(),sizeof(listName.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
+		perror("ERROR connecting");
+		exit(1);
+	}
+
+	userName += ":";
+	if(sendto(sockfd,userName.c_str(),sizeof(userName.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
+		perror("ERROR connecting");
+		exit(1);
+	}
+
+	//receive message type
+	char recvline[1024];
+	bzero(recvline, sizeof(recvline));
+	if(recvfrom(sockfd,recvline,2,0,NULL,NULL) < 0){ //this should be one byte char
+		perror("ERROR connecting");
+		exit(1);
+	}
+
+}
 
 void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 {
@@ -44,21 +76,26 @@ void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 	printf("%s\n",recvline);
 #endif
 	if(strcmp(recvline, "G")==0){ 
-		while(1){
-			bzero(&recvline,sizeof(recvline));
-		
-			//receive actual message	
-			if(recvfrom(sockfd,recvline, 1024,0,NULL,NULL) < 0) {
-				perror("ERROR connecting");
-				exit(1);
-			}
+		bzero(&recvline,sizeof(recvline));
+	
+		//receive actual message	
+		if(recvfrom(sockfd,recvline, 1024,0,NULL,NULL) < 0) {
+			perror("ERROR connecting");
+			exit(1);
+		}
 
-			if(strcmp(recvline, "::")==0) { //last group noted by :: so quit
-				printf("No currently available groups\n");	
-				break;
-			}
+		string line = recvline;
 
-			printf("%s\n",recvline); //otherwise print out the group name
+		if(line == "::") {
+			printf("No currently available groups\n");	
+		}
+		else { //tokenize the groups by ":" and print them all out
+			string s;
+			stringstream ss(line);
+			while(getline(ss, s, ':')){ 
+				if(!s.empty())//the last one's will be empty (because of the double "::") so ignore them
+					cout << s << endl;
+			}
 		}
 	}
 }
@@ -97,25 +134,38 @@ int main(int argc, char **argv)
 
 	string input;
 
+	string cur_group = "P2PChat";
+
 	while(1) {
 
-		cout << "Command: ";
+		cout << cur_group << ">";
 		getline(cin, input);
 
-		if(input== "list") {
-			requestList(sockfd, &servaddr, sizeof(servaddr));
-		}
-		else if(input == "join"){
-			printf("join code goes here\n");
-			//- join the group "groupname" as the user "username". 
-			//Restrict both of these to single word names with printable characters.
+		if(cur_group == "P2PChat"){ //ie not currently in a chat group
+			if(input== "list") {
+				requestList(sockfd, &servaddr, sizeof(servaddr));
+			}
+			else if(input.substr(0, input.find(' ')) == "join"){
+				//- join the group "groupname" as the user "username". 
+				//Restrict both of these to single word names with printable characters.
+				stringstream ss(input);
+				string temp, listName, userName;
+				ss >> temp;
+				ss >> listName;
+				ss >> userName;
+
+				joinList(sockfd, &servaddr, sizeof(servaddr), listName, userName);
+			}
 		}
 		else if(input == "leave"){
 			//leave - leave the group, closing all group connections. the user could optionally join 
 			//another group.
+			cur_group = "P2PChat";
 		}
 		else if(input == "quit"){
+			printf("Bye!\n");
 			//- exit the program, closing all group connections.
+			exit(1);
 		}
 		else {
 			printf("Not a valid command\n");
@@ -126,5 +176,3 @@ int main(int argc, char **argv)
 	close(sockfd);
 	return 0;
 } //end main
-
-
