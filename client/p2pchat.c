@@ -62,39 +62,49 @@ int main(int argc, char **argv)
 
 
 	printf("Welcome to the P2P Client\n");
-	printf("Connecting to %s:%s\n", ap_addr, port);
+	printf("Connecting to %s:%s...\n", ap_addr, port);
 
 	char sendline[1024];
 
 	printf("Command: ");
 	scanf("%s",sendline);
 
-	//send command
-    if(sendto(sockfd,sendline, strlen(sendline),0,(struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
-		writeErrorLog(fpError,"Error sending");
-		perror("ERROR connecting");
-		exit(1);
-    }
+	if(strcmp(sendline, "list") == 0) {
+		//send command
+		if(sendto(sockfd,"L", strlen("L"),0,(struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
+			writeErrorLog(fpError,"Error sending");
+			perror("ERROR connecting");
+			exit(1);
+		}
 
-	//receive message type
-	char recvline[1024];
-	int len = sizeof(servaddr);
-    if(recvfrom(sockfd,recvline, strlen(recvline),0,(struct sockaddr *) &servaddr, &len) < 0) {
-		writeErrorLog(fpError,"Error receiving");
-		perror("ERROR connecting");
-		exit(1);
-    }
+		//receive message type
+		char recvline[1024];
+		int len = sizeof(servaddr);
+		if(recvfrom(sockfd,recvline, strlen(recvline),0,(struct sockaddr *) &servaddr, &len) < 0) {
+			writeErrorLog(fpError,"Error receiving");
+			perror("ERROR connecting");
+			exit(1);
+		}
 
-	printf("%s\n",recvline);
-	//receive actual message	
-    if(recvfrom(sockfd,recvline, strlen(recvline),0,(struct sockaddr *) &servaddr, &len) < 0) {
-		writeErrorLog(fpError,"Error receiving");
-		perror("ERROR connecting");
-		exit(1);
-    }
+#ifdef DEBUG
+		printf("%s\n",recvline);
+#endif
+		//receive actual message	
+		if(recvfrom(sockfd,recvline, strlen(recvline),0,(struct sockaddr *) &servaddr, &len) < 0) {
+			writeErrorLog(fpError,"Error receiving");
+			perror("ERROR connecting");
+			exit(1);
+		}
+#ifdef DEBUG
+		printf("%s\n",recvline);
+#endif
 
-	printf("%s\n",recvline);
+	}
+	else {
+		printf("Not a valid command\n");
+	}
 
+	
 	close(sockfd);
 	fclose(fpError);
 	return 0;
