@@ -82,7 +82,7 @@ int main(int argc, char**argv)
 			exit(1);
 		}
 		#ifdef DEBUG
-			printf("Received: -%s-\n",messageType);	
+			printf("Received: %s\n",messageType);	
 		#endif
 		//list
 		if(strcmp(messageType,"L")==0) {
@@ -119,7 +119,7 @@ int main(int argc, char**argv)
 					#endif
 				} else {
 					#ifdef DEBUG
-						printf("There are %d active groups\n",activeGroups.size());
+						printf("There are %d active groups\n",(int)activeGroups.size());
 					#endif
 				for(i=0;i<activeGroups.size();i++) {
 					strcpy(tempName,activeGroups[i].groupName);
