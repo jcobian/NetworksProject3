@@ -80,7 +80,8 @@ int main(int argc, char **argv)
 		//receive message type
 		char recvline[1024];
 		int len = sizeof(servaddr);
-		if(recvfrom(sockfd,recvline, strlen(recvline),0,(struct sockaddr *) &servaddr, &len) < 0) {
+		n= recvfrom(sockfd,recvline,2,0,NULL,NULL); //this should be one byte char
+		if(n<0) {
 			writeErrorLog(fpError,"Error receiving");
 			perror("ERROR connecting");
 			exit(1);
@@ -89,16 +90,22 @@ int main(int argc, char **argv)
 #ifdef DEBUG
 		printf("%s\n",recvline);
 #endif
-		//receive actual message	
-		if(recvfrom(sockfd,recvline, strlen(recvline),0,(struct sockaddr *) &servaddr, &len) < 0) {
-			writeErrorLog(fpError,"Error receiving");
-			perror("ERROR connecting");
-			exit(1);
-		}
-#ifdef DEBUG
-		printf("%s\n",recvline);
-#endif
+		if(strcmp(recvline, "G")==0){ 
+			while(1) {
+				bzero(&recvline,sizeof(recvline));
+			
+				//receive actual message	
+				if(recvfrom(sockfd,recvline, 1024,0,NULL,NULL) < 0) {
+					writeErrorLog(fpError,"Error receiving");
+					perror("ERROR connecting");
+					exit(1);
+				}
 
+				printf("%s\n",recvline); //otherwise print out the group name
+
+				if(strcmp(recvline, "::")==0) break;
+			}
+		}
 	}
 	else {
 		printf("Not a valid command\n");

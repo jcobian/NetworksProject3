@@ -86,7 +86,7 @@ int main(int argc, char**argv)
 				char sendBack[2];
 				strcpy(sendBack,"G");
 				#ifdef DEBUG
-					printf("About to send message type");
+					printf("About to send message type: %s\n",sendBack);
 				#endif
 				if((obytes=sendto(sockfd,sendBack,strlen(sendBack),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
 					perror("client-sendto error");
