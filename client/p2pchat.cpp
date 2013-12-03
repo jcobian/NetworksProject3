@@ -9,8 +9,10 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <string.h>
+#include <string>
+#include <iostream>
 #include <strings.h>
+#include <cstring>
 #include <errno.h>
 #include <sys/time.h>
 #include <time.h>
@@ -18,7 +20,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#define DEBUG
+//#define DEBUG
+
+using namespace std;
 
 void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 {
@@ -31,8 +35,7 @@ void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 	//receive message type
 	char recvline[1024];
 	bzero(recvline, sizeof(recvline));
-	int n= recvfrom(sockfd,recvline,2,0,NULL,NULL); //this should be one byte char
-	if(n<0) {
+	if(recvfrom(sockfd,recvline,2,0,NULL,NULL) < 0){ //this should be one byte char
 		perror("ERROR connecting");
 		exit(1);
 	}
@@ -41,7 +44,7 @@ void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 	printf("%s\n",recvline);
 #endif
 	if(strcmp(recvline, "G")==0){ 
-		while(1) {
+		while(1){
 			bzero(&recvline,sizeof(recvline));
 		
 			//receive actual message	
@@ -50,7 +53,7 @@ void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 				exit(1);
 			}
 
-			if(strcmp(recvline, "::")==0) {
+			if(strcmp(recvline, "::")==0) { //last group noted by :: so quit
 				printf("No currently available groups\n");	
 				break;
 			}
@@ -89,29 +92,29 @@ int main(int argc, char **argv)
     servaddr.sin_addr.s_addr=inet_addr(ap_addr); //the address
     servaddr.sin_port=htons(atoi(port)); //the port
 
-
 	printf("Welcome to the P2P Client\n");
 	printf("Connecting to %s:%s...\n", ap_addr, port);
 
-	char sendline[1024];
+	string input;
 
 	while(1) {
 
-		printf("Command: ");
-		scanf("%s",sendline);
+		cout << "Command: ";
+		getline(cin, input);
 
-		if(strcmp(sendline, "list") == 0) {
+		if(input== "list") {
 			requestList(sockfd, &servaddr, sizeof(servaddr));
 		}
-		else if(strcmp(sendline, "join")){
+		else if(input == "join"){
+			printf("join code goes here\n");
 			//- join the group "groupname" as the user "username". 
 			//Restrict both of these to single word names with printable characters.
 		}
-		else if(strcmp(sendline, "leave")){
+		else if(input == "leave"){
 			//leave - leave the group, closing all group connections. the user could optionally join 
 			//another group.
 		}
-		else if(strcmp(sendline, "quit")){
+		else if(input == "quit"){
 			//- exit the program, closing all group connections.
 		}
 		else {

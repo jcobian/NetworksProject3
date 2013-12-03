@@ -1,5 +1,5 @@
-all: p2pchat.c 
-	gcc p2pchat.c -o p2pchat
+all: p2pchat.cpp
+	g++ p2pchat.cpp -o p2pchat
 
 clean:
 	rm -f core* *.o *~ p2pchat 
