@@ -64,7 +64,7 @@ int main(int argc, char**argv)
 		exit(1);
 	}
 	socklen_t len = sizeof clientaddr;
-	char messageType;
+	char messageType[2];
 	int ibytes,obytes;
 	vector<group> activeGroups;	
 	while(1) {
@@ -72,48 +72,71 @@ int main(int argc, char**argv)
 		obytes = 0;
 		memset((char*)&messageType,0,sizeof(messageType));
 		#ifdef DEBUG
-			printf("About to receive message type");
+			printf("About to receive message type\n");
 		#endif
-		if((ibytes=recvfrom(sockfd,&messageType,sizeof(messageType),0,(struct sockaddr *)&clientaddr,&len))==-1) {
+		if((ibytes=recvfrom(sockfd,messageType,sizeof(messageType),0,(struct sockaddr *)&clientaddr,&len))==-1) {
 			perror("Client-recvfrom() error");
 			exit(1);
 		}
 		#ifdef DEBUG
-			printf("Received: %c\n",messageType);	
+			printf("Received: %s\n",messageType);	
 		#endif
 		//list
-		if(messageType == 'L') {
-				char sendBack = 'G';
+		if(strcmp(messageType,"L")==0) {
+				char sendBack[2];
+				strcpy(sendBack,"G");
 				#ifdef DEBUG
 					printf("About to send message type");
 				#endif
-				if((obytes=sendto(sockfd,&sendBack,1,0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+				if((obytes=sendto(sockfd,sendBack,strlen(sendBack),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
 					perror("client-sendto error");
 					exit(1);
 				}
 				#ifdef DEBUG
-					printf("Sent: %c\n",sendBack);	
+					printf("Sent: %s\n",sendBack);	
 				#endif
-				char *groupNames;
 				size_t i;
+				char tempName[1024];
+			
+				#ifdef DEBUG
+					printf("Sending group names\n");
+				#endif
+				if(activeGroups.size()==0) {
+					#ifdef DEBUG
+						printf("Active groups is empty\n");
+					#endif
+					char colons[3];
+					strcpy(colons,"::");
+					if((obytes=sendto(sockfd,colons,strlen(colons),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+						perror("client-sendto error");
+						exit(1);
+					}
+					#ifdef DEBUG
+						printf("Sent: %s\n",colons);
+					#endif
+				} else {
+					#ifdef DEBUG
+						printf("There are %d active groups\n",activeGroups.size());
+					#endif
 				for(i=0;i<activeGroups.size();i++) {
-					strcat(groupNames,activeGroups[i].groupName);
-					strcat(groupNames,":");
+					strcpy(tempName,activeGroups[i].groupName);
+					strcat(tempName,":");
+					if(i==activeGroups.size()-1) {
+						strcat(tempName,":");
+					}
+					if((obytes=sendto(sockfd,tempName,strlen(tempName),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+						perror("client-sendto error");
+						exit(1);
+					}
+					#ifdef DEBUG
+						printf("%s",tempName);
+					#endif
+
 				}
-				strcat(groupNames,":");
-				#ifdef DEBUG
-					printf("About to send group names");
-				#endif
-				if((obytes=sendto(sockfd,groupNames,sizeof(groupNames),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
-					perror("client-sendto error");
-					exit(1);
 				}
-				#ifdef DEBUG
-					printf("Sent Groups: %s\n",groupNames);
-				#endif
 						
 		}
-		else if (messageType == 'J') {
+		else if (strcmp(messageType,"J")==0) {
 			//join
 			char inbuffer[4096];
 			memset((char*)&inbuffer,0,sizeof(inbuffer));
