@@ -22,19 +22,21 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-//#define DEBUG
+#define DEBUG
 
 using namespace std;
 
 
-void joinList(int sockfd, struct sockaddr_in * servaddr, int servlen, string listName, string userName)
+void joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, string listName, string userName)
 {
 	//send command
-	if(sendto(sockfd,"J", 2,0, (struct sockaddr *) servaddr, servlen) < 0) {
+	if(sendto(sockfd,"J", strlen("J"),0, (struct sockaddr *) servaddr, servlen) < 0) {
 		perror("ERROR connecting");
 		exit(1);
 	}
-
+	#ifdef DEBUG
+	cout<<"Sent message type of J"<<endl;
+	#endif
 	listName += ":";
 	string result = listName + userName;
 	result+=":";
@@ -42,6 +44,9 @@ void joinList(int sockfd, struct sockaddr_in * servaddr, int servlen, string lis
 		perror("ERROR connecting");
 		exit(1);
 	}
+	#ifdef DEBUG
+		cout<<"Sent list and user of "<<result<<endl;
+	#endif
 /*
 	userName += ":";
 	if(sendto(sockfd,userName.c_str(),strlen(userName.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
@@ -52,19 +57,29 @@ void joinList(int sockfd, struct sockaddr_in * servaddr, int servlen, string lis
 	//receive message type
 	char recvline[1024];
 	bzero(recvline, sizeof(recvline));
-	if(recvfrom(sockfd,recvline,sizeof(recvline),0,NULL,NULL) < 0){ //this should be one byte char
+
+	if(recvfrom(sockfd,recvline,sizeof(recvline),0,(struct sockaddr *)servaddr,&servlen) < 0){ //this should be one byte char
 		perror("ERROR connecting");
 		exit(1);
 	}
-	string mesgType = recvline;
+
+	string mesgType;
+	//bzero(&mesgType, sizeof(mesgType));
+	mesgType = recvline;
+	#ifdef DEBUG
+		cout<<"Received message type of "<<mesgType<<endl;
+	#endif	
 	if(mesgType == "S") //success
 	 {
-		bzero(recvline, sizeof(recvline));
-		if(recvfrom(sockfd,recvline,sizeof(recvline),0,NULL,NULL) < 0){ //this should be one byte char
+		bzero(recvline, sizeof(recvline));	
+		if(recvfrom(sockfd,recvline,sizeof(recvline),0,(struct sockaddr *)servaddr,&servlen) < 0){ //this should be one byte char
 			perror("ERROR connecting");
 			exit(1);
 		}
 			string line = recvline;
+			#ifdef DEBUG
+				cout<<"Received groupUserCombo of "<<line<<endl;
+			#endif
 			string s;
 			stringstream ss(line);
 			int i=0;
@@ -150,7 +165,8 @@ int main(int argc, char **argv)
     	//convert hostname into ip addr
 	struct addrinfo hints;
 	struct addrinfo *servinfo;
-    	memset(&hints,0,sizeof(hints));
+    	//weird, you need the memset or else it won't work
+	memset(&hints,0,sizeof(hints));
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_DGRAM;
 	//get addr info o fht eip address, feed it the hints, results stored
@@ -170,7 +186,7 @@ int main(int argc, char **argv)
 			addr = &(ipv4->sin_addr);
 			//ipver = "IPv4";
 		}
-		//convert IP to a string
+		//convert IP to a string, store in ipstr
 		inet_ntop(p->ai_family,addr,ipstr,sizeof ipstr);
 	}
 	
@@ -215,6 +231,8 @@ int main(int argc, char **argv)
 				ss >> listName;
 				ss >> userName;
 				joinList(sockfd, &servaddr, sizeof(servaddr), listName, userName);
+				
+
 			}
 		}
 		else if(input == "leave"){

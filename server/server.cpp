@@ -101,7 +101,7 @@ int main(int argc, char**argv)
 				string tempName="";
 			
 				#ifdef DEBUG
-					printf("Sending group names\n");
+					printf("Sending group names:");
 				#endif
 				if(activeGroups.size()==0) {
 					#ifdef DEBUG
@@ -124,6 +124,9 @@ int main(int argc, char**argv)
 							tempName+=":";
 						}
 					}
+					#ifdef DEBUG
+						cout<<tempName<<endl;
+					#endif
 				}
 				if((obytes=sendto(sockfd,tempName.c_str(),strlen(tempName.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
 					perror("client-sendto error");
@@ -140,7 +143,7 @@ int main(int argc, char**argv)
 				exit(1);
 			}
 			#ifdef DEBUG
-				printf("Receive: %s\n",inbuffer);
+				printf("GroupUser combo Receive: %s\n",inbuffer);
 			#endif
 			/*char *pch = strtok(inbuffer,":");
 			char groupName[1024];
@@ -197,6 +200,9 @@ int main(int argc, char**argv)
 				perror("client-sendto error");
 				exit(1);
 			}
+			#ifdef DEBUG
+				cout<<"Sending message success of "<<messageSuccess<<endl;
+			#endif
 			string result="";
 			if(foundGroup) {
 				//add the newMember to the group
@@ -229,6 +235,9 @@ int main(int argc, char**argv)
 						perror("client send to error");
 						exit(1);	
 					}
+				#ifdef DEBUG
+					cout<<"Sending members of group "<<result<<endl;
+				#endif
 					
 			}//ends else when group and username actually have a length
 		} //ends if message is join
