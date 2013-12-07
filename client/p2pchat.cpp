@@ -21,6 +21,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 //#define DEBUG
 
 using namespace std;
@@ -35,23 +36,54 @@ void joinList(int sockfd, struct sockaddr_in * servaddr, int servlen, string lis
 	}
 
 	listName += ":";
-	if(sendto(sockfd,listName.c_str(),sizeof(listName.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
+	string result = listName + userName;
+	result+=":";
+	if(sendto(sockfd,result.c_str(),strlen(result.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
 		perror("ERROR connecting");
 		exit(1);
 	}
-
+/*
 	userName += ":";
-	if(sendto(sockfd,userName.c_str(),sizeof(userName.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
+	if(sendto(sockfd,userName.c_str(),strlen(userName.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
 		perror("ERROR connecting");
 		exit(1);
 	}
-
+*/
 	//receive message type
 	char recvline[1024];
 	bzero(recvline, sizeof(recvline));
-	if(recvfrom(sockfd,recvline,2,0,NULL,NULL) < 0){ //this should be one byte char
+	if(recvfrom(sockfd,recvline,sizeof(recvline),0,NULL,NULL) < 0){ //this should be one byte char
 		perror("ERROR connecting");
 		exit(1);
+	}
+	string mesgType = recvline;
+	if(mesgType == "S") //success
+	 {
+		bzero(recvline, sizeof(recvline));
+		if(recvfrom(sockfd,recvline,sizeof(recvline),0,NULL,NULL) < 0){ //this should be one byte char
+			perror("ERROR connecting");
+			exit(1);
+		}
+			string line = recvline;
+			string s;
+			stringstream ss(line);
+			int i=0;
+			cout<<"List of Users.."<<endl;
+			while(getline(ss, s, ':')){ 
+				if(!s.empty())//the last one's will be empty (because of the double "::") so ignore them
+				if(i%2==0) { //even number so username
+					cout<<s<<":";
+				}else { //odd number so ip address
+					cout<<s<<endl;
+				}	
+				i++;
+			}
+		
+		
+	}
+	else {
+		//failure do something
+		cout<<"Failure!!"<<endl;
 	}
 
 }
@@ -114,7 +146,36 @@ int main(int argc, char **argv)
 	//set up ports and ip based on user input
 	char* pch = argv[1];
 	char* ap_addr = strtok (pch,":");
-    char* port = strtok(NULL, "");
+	char* port = strtok(NULL, "");
+    	//convert hostname into ip addr
+	struct addrinfo hints;
+	struct addrinfo *servinfo;
+    	memset(&hints,0,sizeof(hints));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM;
+	//get addr info o fht eip address, feed it the hints, results stored
+    	//in the servinfo which is  linked list
+    	int status = getaddrinfo(ap_addr,port,&hints,&servinfo);
+	if(status!=0) {
+		printf("getaddrinfo: %s\n",gai_strerror(status));
+		exit(1);
+	}
+	char ipstr[INET_ADDRSTRLEN];
+	struct addrinfo *p;
+	for(p=servinfo;p!=NULL;p=p->ai_next) {
+		void *addr;
+		//char *ipver;
+		if(p->ai_family = AF_INET) {
+			struct sockaddr_in *ipv4 = (struct sockaddr_in *)p->ai_addr;
+			addr = &(ipv4->sin_addr);
+			//ipver = "IPv4";
+		}
+		//convert IP to a string
+		inet_ntop(p->ai_family,addr,ipstr,sizeof ipstr);
+	}
+	
+
+
 
 	//create the socket
     sockfd=socket(AF_INET,SOCK_DGRAM,0);
@@ -126,7 +187,7 @@ int main(int argc, char **argv)
 	//build server inet address
     bzero(&servaddr,sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr=inet_addr(ap_addr); //the address
+    servaddr.sin_addr.s_addr=inet_addr(ipstr); //the address
     servaddr.sin_port=htons(atoi(port)); //the port
 
 	printf("Welcome to the P2P Client\n");
@@ -153,7 +214,6 @@ int main(int argc, char **argv)
 				ss >> temp;
 				ss >> listName;
 				ss >> userName;
-
 				joinList(sockfd, &servaddr, sizeof(servaddr), listName, userName);
 			}
 		}

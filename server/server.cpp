@@ -67,7 +67,7 @@ int main(int argc, char**argv)
 	char messageType[2];
 	int ibytes,obytes;
 	vector<group> activeGroups;	
-	
+/*	
 	#ifdef DEBUG
 		group newGroup;
 		newGroup.groupName = "Irish";
@@ -75,7 +75,7 @@ int main(int argc, char**argv)
 		group newGroup2;
 		newGroup2.groupName = "Gold";
 		activeGroups.push_back(newGroup2);
-	#endif
+	#endif*/
 	while(1) {
 		ibytes = 0;
 		obytes = 0;
@@ -96,8 +96,9 @@ int main(int argc, char**argv)
 					exit(1);
 				}
 				size_t i;
-				char tempName[1024];
-				bzero(&tempName, sizeof(tempName));
+				//char tempName[1024];
+				//bzero(&tempName, sizeof(tempName));
+				string tempName="";
 			
 				#ifdef DEBUG
 					printf("Sending group names\n");
@@ -114,14 +115,17 @@ int main(int argc, char**argv)
 					}
 				} else {
 					for(i=0;i<activeGroups.size();i++) {
-						strcat(tempName,activeGroups[i].groupName);
-						strcat(tempName,":");
+						tempName+=activeGroups[i].groupName;
+						tempName+=":";
+						//strcat(tempName,activeGroups[i].groupName);
+						//strcat(tempName,":");
 						if(i==activeGroups.size()-1) {
-							strcat(tempName,":");
+							//strcat(tempName,":");
+							tempName+=":";
 						}
 					}
 				}
-				if((obytes=sendto(sockfd,tempName,strlen(tempName),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+				if((obytes=sendto(sockfd,tempName.c_str(),strlen(tempName.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
 					perror("client-sendto error");
 					exit(1);
 				}
@@ -138,18 +142,34 @@ int main(int argc, char**argv)
 			#ifdef DEBUG
 				printf("Receive: %s\n",inbuffer);
 			#endif
-			char *pch = strtok(inbuffer,":");
-			char *groupName;
+			/*char *pch = strtok(inbuffer,":");
+			char groupName[1024];
 			strcpy(groupName,pch);
-			char *userName;
+			char userName[1024];
 			pch = strtok(NULL,":");
-			strcpy(userName,pch);
+			strcpy(userName,pch);*/
+			string groupName="",userName="";
+			string line = inbuffer;
+			string s;
+			stringstream ss(line);
+			getline(ss,s,':');
+			groupName = s;
+			getline(ss,s,':');
+			userName = s;
+			
 			#ifdef DEBUG
-				printf("Join: group name is %s, username is %s\n",groupName,userName);
+			//	printf("Join: group name is %s, username is %s\n",groupName,userName);
+				cout<<"Join: group name is "<<groupName<< ", username is "<<userName<<endl;
 			#endif
-			char messageSuccess='S';
-			if(strlen(groupName)==0 || strlen(userName)==0) {
-				messageSuccess='F';
+			string messageSuccess="S";
+			if(groupName.length()==0 || userName.length()==0) {
+				messageSuccess="F";
+				//send the message success status
+			if((obytes=sendto(sockfd,messageSuccess.c_str(),strlen(messageSuccess.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+				perror("client-sendto error");
+				exit(1);
+			}
+			
 			}
 			else {
 			//check if group name exists
@@ -157,11 +177,14 @@ int main(int argc, char**argv)
 			int foundGroup = 0; //boolean 0 if the group is not found, 1 if it is
 			int groupIndex; //the index of what group the member should be added to
 			member newMember;
-			strcpy(newMember.name,userName);
+			newMember.name = userName;
+			//strcpy(newMember.name,userName.c_str());
 			strcpy(newMember.ipAddress,inet_ntoa(clientaddr.sin_addr));
 			for(i=0;i<activeGroups.size();i++) {
 				//success 
-				if(strcmp(groupName,activeGroups[i].groupName)==0) {
+				//if(strcmp(groupName.c_str(),activeGroups[i].groupName)==0)
+				if(groupName==activeGroups[i].groupName)	
+				{	
 					foundGroup = 1;
 					groupIndex = i;
 					break;
@@ -170,20 +193,43 @@ int main(int argc, char**argv)
 				
 			}
 			//send the message success status
-			if((obytes=sendto(sockfd,&messageSuccess,1,0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+			if((obytes=sendto(sockfd,messageSuccess.c_str(),strlen(messageSuccess.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
 				perror("client-sendto error");
 				exit(1);
 			}
+			string result="";
 			if(foundGroup) {
 				//add the newMember to the group
 				activeGroups[groupIndex].members.push_back(newMember);
+				string username="",address="";
+				for(unsigned int i=0;i<activeGroups[groupIndex].members.size();i++) {
+					username = activeGroups[groupIndex].members[i].name;
+					username+=":";
+					address = activeGroups[groupIndex].members[i].ipAddress;
+					address+=":";
+					result += (username + address);
+				}
+				cout<<"Found group and users are "<<result<<endl;
+				result+=":";
 			}else {
+				cout<<"Creating new group "<<groupName<<" with "<<newMember.name<<endl;
 				///create a new group
 				group newGroup;
-				strcpy(newGroup.groupName,groupName);
+				newGroup.groupName = groupName;
+				//strcpy(newGroup.groupName,groupName.c_str());
 				newGroup.members.push_back(newMember);	
-
+				result+=newMember.name;
+				result+=":";
+				result+=newMember.ipAddress;
+				result+="::";
+				activeGroups.push_back(newGroup);		
+			
 			}
+				if(sendto(sockfd,result.c_str(),strlen(result.c_str()),0,(struct sockaddr*)&clientaddr,sizeof(clientaddr))<0){
+						perror("client send to error");
+						exit(1);	
+					}
+					
 			}//ends else when group and username actually have a length
 		} //ends if message is join
 			
