@@ -182,6 +182,46 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 	}
 }
 
+
+//notify server that we want to leave a specific list, and we are user @userName
+bool leaveList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, string listName, string userName)
+{
+	//send command
+	if(sendto(sockfd,"L", strlen("L"),0, (struct sockaddr *) servaddr, servlen) < 0) {
+		perror("ERROR connecting");
+		exit(1);
+	}
+	listName += ":";
+	string result = listName + userName;
+	result+=":";
+	if(sendto(sockfd,result.c_str(),strlen(result.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
+		perror("ERROR connecting");
+		exit(1);
+	}
+	#ifdef DEBUG
+		cout<<"Notified Server that this user is leaving: "<<result<<endl;
+	#endif
+
+	//receive message type
+	char recvline[2];
+	bzero(recvline, sizeof(recvline));
+
+	if(recvfrom(sockfd,recvline,sizeof(recvline),0,(struct sockaddr *)servaddr,&servlen) < 0){ //this should be one byte char
+		perror("ERROR connecting");
+		exit(1);
+	}
+
+	string mesgType;
+	mesgType = recvline;
+	if(mesgType == "S") {//success
+		return true;
+	}
+	else { //failure do something
+		cout<<"Failed to leave list due to server issue"<<endl;
+		return false;
+	}
+}
+
 void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 {
 	//send command
@@ -365,6 +405,8 @@ int main(int argc, char **argv)
 	string input;
 
 	string cur_group = "P2PChat";
+	string listName = "none";
+	string userName = "none";
 
 	while(1) { //main program while loop
 
@@ -379,7 +421,7 @@ int main(int argc, char **argv)
 				//- join the group "groupname" as the user "username". 
 				//Restrict both of these to single word names with printable characters.
 				stringstream ss(input);
-				string temp, listName, userName;
+				string temp;
 				ss >> temp;
 				ss >> listName;
 				ss >> userName;
@@ -398,17 +440,26 @@ int main(int argc, char **argv)
 			}
 		}
 		else { //Currently in a chat group!
-			if(input == "leave"){
-				closeAllConnections();	
-				//TODO the user could optionally join 
-				//another group.
-				cur_group = "P2PChat";
-			}
-			else if(input == "quit"){
-				closeAllConnections();	
-				printf("Bye!\n");
-				//- exit the program, closing all group connections.
-				exit(1);
+
+			if(input == "leave" || input == "quit"){ //both leave and quit should tell server and close all connections gracefully
+				if(leaveList(sockfd, &servaddr, sizeof(servaddr), listName, userName)){
+					//if leaveList was succesful, close all other connections
+					closeAllConnections();	
+
+					if(input=="quit") { //assuming everything closed correctly, now quit 
+						printf("Bye!\n");
+						exit(1); //- exit the program 
+					}
+					else { //'leave'
+						//TODO the user could optionally join 
+						//another group.
+						cur_group = "P2PChat";
+					}
+				}
+				else {
+					cout << "Error: Server didn't receive message to leave.  Try again or contact your network administrator"<<endl;
+				}
+
 			}
 			else {
 				//TODO chat
