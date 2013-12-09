@@ -186,8 +186,8 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 //notify server that we want to leave a specific list, and we are user @userName
 bool leaveList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, string listName, string userName)
 {
-	//send command
-	if(sendto(sockfd,"L", strlen("L"),0, (struct sockaddr *) servaddr, servlen) < 0) {
+	//send command "Q" for quit list!
+	if(sendto(sockfd,"Q", strlen("Q"),0, (struct sockaddr *) servaddr, servlen) < 0) {
 		perror("ERROR connecting");
 		exit(1);
 	}

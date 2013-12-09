@@ -82,6 +82,11 @@ int main(int argc, char**argv)
 			perror("Client-recvfrom() error");
 			exit(1);
 		}
+
+		#ifdef DEBUG
+			cout << "Incoming Flag: " <<messageType << endl;
+		#endif	
+
 		//////////////////////////////////
 		//list
 		if(strcmp(messageType,"L")==0) {
@@ -204,11 +209,58 @@ int main(int argc, char**argv)
 				#endif
 					
 			}//ends else when group and username actually have a length
-		} //ends if message is join
+		} 
+		//////////////////////////////////
+		//leave
+		else if (strcmp(messageType,"Q")==0) {
+	
+			//receive the group:user
+			char inbuffer[1024];
+			memset((char*)&inbuffer,0,sizeof(inbuffer));
+			if(recvfrom(sockfd,inbuffer,sizeof(inbuffer),0,(struct sockaddr *)&clientaddr,&len)<0) {
+				perror("Client-recvfrom() error");
+				exit(1);
+			}
+
+			string groupName="",userName="";
+			string line = inbuffer;
+			string s;
+			stringstream ss(line);
+			getline(ss,s,':');
+			groupName = s;
+			getline(ss,s,':');
+			userName = s;
 			
-/*		if(close(sockfd) !=0) {
-			perror("client-sockfd closing failed");
-			exit(1);
-		}*/
+			string messageSuccess="F"; //changes to S only upon succesful removal from group
+
+			if(groupName.length()!=0 && userName.length()!=0) { //we succesfully recieved the groupname and username, so now attempt to remove them from the desired list
+
+				if(activeGroups.find(groupName) != activeGroups.end()) { //if the group exists in activeGroups
+					//now remove that user from the group
+					for(unsigned int i=0;i<activeGroups[groupName].size();i++) {
+						if(activeGroups[groupName][i].name == userName) {
+							activeGroups[groupName].erase(activeGroups[groupName].begin()+i);
+
+							messageSuccess="S"; //let client know removal was succesful
+
+							#ifdef DEBUG
+								cout<<"Removed user: "<<userName<< " from: "<<groupName<<endl;
+							#endif
+						}
+					}
+				} else { //otherwise they tried to leave a group that didn't exist, ERROR
+					cout << "ERROR: User wanted to leave a group that doesn't exist?"<<endl;
+				}
+			}
+			
+			//send the message success status
+			if(sendto(sockfd,messageSuccess.c_str(),strlen(messageSuccess.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr))<0) {
+				perror("client-sendto error");
+				exit(1);
+			}
+		} 
+		else {
+			cout << "Received a message with non-recognizable flag?  lulz"<<endl;
+		}
 	}
 }
