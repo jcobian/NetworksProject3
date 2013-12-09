@@ -19,17 +19,41 @@
 #include <time.h>
 #include <vector>
 
+#include <pthread.h>
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #define DEBUG
 
+#define PORT 9425
+
+//TODO actually send the message to everyone
+//If you receive a message, pass it on to everyone else
+//when you leave, tell the server
+//
+//ADVANCED:
+//ping the server every 2 minutes to 'stay alive'
+//reconnection behavior if a user leaves
+//file transfer
+//nicer UI
+
 using namespace std;
+
+pthread_mutex_t server_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+typedef struct {
+    int connfd;
+    struct sockaddr_in cliaddr;
+    socklen_t clilen;
+
+} thread_info;
 
 typedef struct user {
 	int sockfd;
 	struct sockaddr_in sockaddr;
+	string ip_address;
 } user;
 
 vector<user> other_users; //vector of ips representing all users currently connected to
@@ -40,7 +64,7 @@ void sendMessage(string message) {
 		cout << "Forwarding message to: ";
 	#endif
 	for(int i=0; i<other_users.size(); i++) {
-		cout << "sockfd: "<<other_users[i].sockfd << " sockaddr:"<<other_users[i].sockaddr.sin_addr.s_addr<<endl;
+		cout << "sockfd: "<<other_users[i].sockfd << " sockaddr:"<<other_users[i].ip_address<<endl;
 		//actually forward the message here
 		
 		//sendto(sockfd, message.c_str(), message.length(),0,(struct sockaddr *) &servaddr, sizeof(servaddr));
@@ -131,7 +155,7 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 			bzero(&cliaddr,sizeof(cliaddr));
 			cliaddr.sin_family = AF_INET;
 			cliaddr.sin_addr.s_addr=inet_addr((user_ips[i].c_str())); //the address
-			cliaddr.sin_port=htons(9425); //the port
+			cliaddr.sin_port=htons(PORT); //the port
 
 			//connect
 			if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) 
@@ -143,6 +167,7 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 				user temp_user;
 				temp_user.sockfd = cli_sockfd;
 				temp_user.sockaddr = cliaddr;
+				temp_user.ip_address = user_ips[i];
 				other_users.push_back(temp_user);
 				break;
 			}
@@ -217,6 +242,50 @@ void closeAllConnections()
 	other_users.clear();	
 }
 
+//Listen for incoming TCP connections, and if for your current group
+//add the incoming user to @other_users
+void *listenForConnections(void *input) {
+	
+	int sockfd,connfd,n;
+    struct sockaddr_in servaddr, cliaddr;
+    socklen_t clilen;
+
+    //create the socket
+	sockfd=socket(AF_INET,SOCK_STREAM,0);
+    if(sockfd < 0) {
+        perror("ERROR opening socket");
+    }
+
+    //build server inet address
+	bzero(&servaddr,sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr=htonl(INADDR_ANY);
+
+    servaddr.sin_port=htons(PORT);
+
+    bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+    listen(sockfd,1024);
+
+    while(1) {
+        clilen = sizeof(cliaddr);
+        connfd = accept(sockfd,(struct sockaddr *)&cliaddr,&clilen);
+
+        printf("New client accepted!\n");
+        printf("\tNew client address:%s\n",inet_ntoa(cliaddr.sin_addr));
+        printf("\tClient port:%d\n",cliaddr.sin_port);
+
+		//TODO if were're in the correct group, add the info to
+		//other_users
+		user temp_user;
+		temp_user.sockfd = sockfd;
+		temp_user.sockaddr = cliaddr;
+		temp_user.ip_address = inet_ntoa(cliaddr.sin_addr);
+		other_users.push_back(temp_user);
+	}
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	if(argc!=2)
@@ -224,6 +293,19 @@ int main(int argc, char **argv)
 		printf("usage: ./p2pchat <IP address>\n");
 		exit(1);
 	}
+
+	//spawn thread to listen for incoming TCP connections
+	int info;
+	pthread_t thread;
+	int status = pthread_create(&thread, NULL, listenForConnections, &info);
+
+	#ifdef DEBUG
+		if(status)
+			printf("Error creating thread for TCP listening: %i\n", status);
+		else
+			printf("Listening for TCP connections (Thread created)\n");
+	#endif
+
 
 	int sockfd, n;
 	struct sockaddr_in servaddr;
@@ -241,7 +323,7 @@ int main(int argc, char **argv)
 	hints.ai_socktype = SOCK_DGRAM;
 	//get addr info of the ip address, feed it the hints, results stored
 	//in the servinfo which is a linked list
-	int status = getaddrinfo(ap_addr,port,&hints,&servinfo);
+	status = getaddrinfo(ap_addr,port,&hints,&servinfo);
 	if(status!=0) {
 		printf("getaddrinfo: %s\n",gai_strerror(status));
 		exit(1);
