@@ -27,7 +27,7 @@
 using namespace std;
 
 
-void joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, string listName, string userName)
+bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, string listName, string userName)
 {
 	//send command
 	if(sendto(sockfd,"J", strlen("J"),0, (struct sockaddr *) servaddr, servlen) < 0) {
@@ -70,37 +70,37 @@ void joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 		cout<<"Received message type of "<<mesgType<<endl;
 	#endif	
 	if(mesgType == "S") //success
-	 {
+	{
 		bzero(recvline, sizeof(recvline));	
 		if(recvfrom(sockfd,recvline,sizeof(recvline),0,(struct sockaddr *)servaddr,&servlen) < 0){ //this should be one byte char
 			perror("ERROR connecting");
 			exit(1);
 		}
-			string line = recvline;
-			#ifdef DEBUG
-				cout<<"Received groupUserCombo of "<<line<<endl;
-			#endif
-			string s;
-			stringstream ss(line);
-			int i=0;
-			cout<<"List of Users.."<<endl;
-			while(getline(ss, s, ':')){ 
-				if(!s.empty())//the last one's will be empty (because of the double "::") so ignore them
-				if(i%2==0) { //even number so username
-					cout<<s<<":";
-				}else { //odd number so ip address
-					cout<<s<<endl;
-				}	
-				i++;
-			}
-		
-		
+		string line = recvline;
+		#ifdef DEBUG
+			//cout<<"Received groupUser of "<<line<<endl;
+		#endif
+
+		string s;
+		stringstream ss(line);
+		int i=0;
+		cout<<"List of Users.."<<endl;
+		while(getline(ss, s, ':')){ 
+			if(!s.empty())//the last one's will be empty (because of the double "::") so ignore them
+			if(i%2==0) { //even number so username
+				cout<<s<<":";
+			}else { //odd number so ip address
+				cout<<s<<endl;
+			}	
+			i++;
+		}
+		return true;
 	}
 	else {
 		//failure do something
-		cout<<"Failure!!"<<endl;
+		cout<<"Failed to join list due to server issue"<<endl;
+		return false;
 	}
-
 }
 
 void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
@@ -120,8 +120,9 @@ void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 	}
 
 #ifdef DEBUG
-	printf("%s\n",recvline);
+//	printf("%s\n",recvline);
 #endif
+
 	if(strcmp(recvline, "G")==0){ 
 		bzero(&recvline,sizeof(recvline));
 	
@@ -162,16 +163,16 @@ int main(int argc, char **argv)
 	char* pch = argv[1];
 	char* ap_addr = strtok (pch,":");
 	char* port = strtok(NULL, "");
-    	//convert hostname into ip addr
+
+	//convert hostname into ip addr
 	struct addrinfo hints;
 	struct addrinfo *servinfo;
-    	//weird, you need the memset or else it won't work
-	memset(&hints,0,sizeof(hints));
+	memset(&hints,0,sizeof(hints)); //weird, you need the memset or else it won't work
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_DGRAM;
-	//get addr info o fht eip address, feed it the hints, results stored
-    	//in the servinfo which is  linked list
-    	int status = getaddrinfo(ap_addr,port,&hints,&servinfo);
+	//get addr info of the ip address, feed it the hints, results stored
+	//in the servinfo which is a linked list
+	int status = getaddrinfo(ap_addr,port,&hints,&servinfo);
 	if(status!=0) {
 		printf("getaddrinfo: %s\n",gai_strerror(status));
 		exit(1);
@@ -189,6 +190,7 @@ int main(int argc, char **argv)
 		//convert IP to a string, store in ipstr
 		inet_ntop(p->ai_family,addr,ipstr,sizeof ipstr);
 	}
+	//CHAS: this was causing me compilation problems, hopefully will fix it later?
 	//free(addrinfo);	
 
 
@@ -213,12 +215,12 @@ int main(int argc, char **argv)
 
 	string cur_group = "P2PChat";
 
-	while(1) {
+	while(1) { //main program while loop
 
 		cout << cur_group << ">";
 		getline(cin, input);
 
-		if(cur_group == "P2PChat"){ //ie not currently in a chat group
+		if(cur_group == "P2PChat"){ //Not currently in a chat group
 			if(input== "list") {
 				requestList(sockfd, &servaddr, sizeof(servaddr));
 			}
@@ -230,23 +232,36 @@ int main(int argc, char **argv)
 				ss >> temp;
 				ss >> listName;
 				ss >> userName;
-				joinList(sockfd, &servaddr, sizeof(servaddr), listName, userName);
-				
-
+				if(joinList(sockfd, &servaddr, sizeof(servaddr), listName, userName)){
+					//if joinList was succesful, change the group name
+					cur_group = listName;
+				}
+			}
+			else if(input == "quit"){
+				printf("Bye!\n");
+				//- exit the program, closing all group connections.
+				exit(1);
+			}
+			else {
+				printf("Not a valid command\n");
 			}
 		}
-		else if(input == "leave"){
-			//leave - leave the group, closing all group connections. the user could optionally join 
-			//another group.
-			cur_group = "P2PChat";
-		}
-		else if(input == "quit"){
-			printf("Bye!\n");
-			//- exit the program, closing all group connections.
-			exit(1);
-		}
-		else {
-			printf("Not a valid command\n");
+		else { //Currently in a chat group!
+			if(input == "leave"){
+				//leave - leave the group, closing all group connections. TODO the user could optionally join 
+				//another group.
+				cur_group = "P2PChat";
+			}
+			else if(input == "quit"){
+				printf("Bye!\n");
+				//TODO close all connections
+				//- exit the program, closing all group connections.
+				exit(1);
+			}
+			else {
+				//TODO chat
+				cout << "Sending: " << input << endl;
+			}
 		}
 	}
 
