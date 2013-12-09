@@ -5,7 +5,7 @@
 using namespace std;
 typedef struct member {
 	string name;
-	char *ipAddress;
+	string ipAddress;
 } member;
 
 typedef struct group {

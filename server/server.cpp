@@ -168,33 +168,6 @@ int main(int argc, char**argv)
 			string messageSuccess="S";
 			if(groupName.length()==0 || userName.length()==0) {
 				messageSuccess="F";
-				//send the message success status
-			if((obytes=sendto(sockfd,messageSuccess.c_str(),strlen(messageSuccess.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
-				perror("client-sendto error");
-				exit(1);
-			}
-			
-			}
-			else {
-			//check if group name exists
-			size_t i;
-			int foundGroup = 0; //boolean 0 if the group is not found, 1 if it is
-			int groupIndex; //the index of what group the member should be added to
-			member newMember;
-			newMember.name = userName;
-			//strcpy(newMember.name,userName.c_str());
-			strcpy(newMember.ipAddress,inet_ntoa(clientaddr.sin_addr));
-			for(i=0;i<activeGroups.size();i++) {
-				//success 
-				//if(strcmp(groupName.c_str(),activeGroups[i].groupName)==0)
-				if(groupName==activeGroups[i].groupName)	
-				{	
-					foundGroup = 1;
-					groupIndex = i;
-					break;
-				}
-				
-				
 			}
 			//send the message success status
 			if((obytes=sendto(sockfd,messageSuccess.c_str(),strlen(messageSuccess.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
@@ -204,38 +177,62 @@ int main(int argc, char**argv)
 			#ifdef DEBUG
 				cout<<"Sending message success of "<<messageSuccess<<endl;
 			#endif
-			string result="";
-			if(foundGroup) {
-				//add the newMember to the group
-				activeGroups[groupIndex].members.push_back(newMember);
-				string username="",address="";
-				for(unsigned int i=0;i<activeGroups[groupIndex].members.size();i++) {
-					username = activeGroups[groupIndex].members[i].name;
-					username+=":";
-					address = activeGroups[groupIndex].members[i].ipAddress;
-					address+=":";
-					result += (username + address);
+
+
+			if(messageSuccess=="S") {
+				size_t i;
+				int foundGroup = 0; //boolean 0 if the group is not found, 1 if it is
+				int groupIndex; //the index of what group the member should be added to
+				member newMember;
+				newMember.name = userName;
+				//strcpy(newMember.name,userName.c_str());
+				newMember.ipAddress = inet_ntoa(clientaddr.sin_addr);
+
+				for(i=0;i<activeGroups.size();i++) { //success 
+					//if(strcmp(groupName.c_str(),activeGroups[i].groupName)==0)
+					if(groupName==activeGroups[i].groupName) {	
+						foundGroup = 1;
+						groupIndex = i;
+						break;
+					}
 				}
-				cout<<"Found group and users are "<<result<<endl;
-				result+=":";
-			}else {
-				cout<<"Creating new group "<<groupName<<" with "<<newMember.name<<endl;
-				///create a new group
-				group newGroup;
-				newGroup.groupName = groupName;
-				//strcpy(newGroup.groupName,groupName.c_str());
-				newGroup.members.push_back(newMember);	
-				result+=newMember.name;
-				result+=":";
-				result+=newMember.ipAddress;
-				result+="::";
-				activeGroups.push_back(newGroup);		
-			
-			}
+
+				string result="";
+				if(foundGroup) {
+					//add the newMember to the group
+					activeGroups[groupIndex].members.push_back(newMember);
+					string username="",address="";
+
+					//turn the members into a string to be sent to client
+					for(unsigned int i=0;i<activeGroups[groupIndex].members.size();i++) {
+						username = activeGroups[groupIndex].members[i].name;
+						username+=":";
+						cout << "username: " << username<<endl;
+						address = activeGroups[groupIndex].members[i].ipAddress;
+						address+=":";
+						cout << "address: " << address<<endl;
+						result += (username + address);
+					}
+
+					cout<<"Found group and users are "<<result<<endl;
+					result+=":";
+				} else {
+					cout<<"Creating new group "<<groupName<<" with "<<newMember.name<<endl;
+					///create a new group
+					group newGroup;
+					newGroup.groupName = groupName;
+					//strcpy(newGroup.groupName,groupName.c_str());
+					newGroup.members.push_back(newMember);	
+					result+=newMember.name;
+					result+=":";
+					result+=newMember.ipAddress;
+					result+="::";
+					activeGroups.push_back(newGroup);		
+				}
 				if(sendto(sockfd,result.c_str(),strlen(result.c_str()),0,(struct sockaddr*)&clientaddr,sizeof(clientaddr))<0){
 						perror("client send to error");
 						exit(1);	
-					}
+				}
 				#ifdef DEBUG
 					cout<<"Sending members of group "<<result<<endl;
 				#endif
