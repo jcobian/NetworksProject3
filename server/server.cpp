@@ -199,11 +199,8 @@ int main(int argc, char**argv)
 
 				string result="";
 				if(foundGroup) {
-					//add the newMember to the group
-					activeGroups[groupIndex].members.push_back(newMember);
 					string username="",address="";
-
-					//turn the members into a string to be sent to client
+					//turn the current members into a string to be sent to client
 					for(unsigned int i=0;i<activeGroups[groupIndex].members.size();i++) {
 						username = activeGroups[groupIndex].members[i].name;
 						username+=":";
@@ -216,16 +213,20 @@ int main(int argc, char**argv)
 
 					cout<<"Found group and users are "<<result<<endl;
 					result+=":";
+
+					//add the newMember to the group
+					activeGroups[groupIndex].members.push_back(newMember);
 				} else {
 					cout<<"Creating new group "<<groupName<<" with "<<newMember.name<<endl;
 					///create a new group
 					group newGroup;
 					newGroup.groupName = groupName;
-					//strcpy(newGroup.groupName,groupName.c_str());
 					newGroup.members.push_back(newMember);	
+					/*
 					result+=newMember.name;
 					result+=":";
 					result+=newMember.ipAddress;
+					*/
 					result+="::";
 					activeGroups.push_back(newGroup);		
 				}
