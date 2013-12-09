@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <sstream>
 #include "../chatinfo.h"
+#include <map>
+
 #define DEBUG
 
 using namespace std;
@@ -69,7 +71,7 @@ int main(int argc, char**argv)
 	//////////////////////////////////////
 	//main loop listening for incoming UDP packets
 	//
-	vector<group> activeGroups;	
+	map<string, vector<member> > activeGroups;	//key is the name of the group, value is a vector of members
 
 	while(1) { 
 		memset((char*)&messageType,0,sizeof(messageType));
@@ -105,13 +107,12 @@ int main(int argc, char**argv)
 					printf("Sending group names:\n");
 				#endif
 
-				for(size_t i=0;i<activeGroups.size();i++) {
-					tempName+=activeGroups[i].groupName;
-					tempName+=":";
-					if(i==activeGroups.size()-1) {
-						tempName+=":";
-					}
+				//iterate over available groups and concatenate to tempName
+				for( map<string,vector<member> >::iterator it=activeGroups.begin(); it!=activeGroups.end(); ++it) {
+					tempName+= (*it).first+":";
 				}
+				tempName+=":"; //add an extra semicolon to signify the end of the list
+
 				#ifdef DEBUG
 					cout<<tempName<<endl;
 				#endif
@@ -165,52 +166,34 @@ int main(int argc, char**argv)
 
 			//we succesfully recieved the groupname and username, so now attempt to add them to our list
 			if(messageSuccess=="S") {
-				int foundGroup = 0; //boolean 0 if the group is not found, 1 if it is
-				int groupIndex; //the index of what group the member should be added to
 				member newMember;
 				newMember.name = userName;
 				newMember.ipAddress = inet_ntoa(clientaddr.sin_addr);
 
-				for(size_t i=0;i<activeGroups.size();i++) { //success 
-					if(groupName==activeGroups[i].groupName) {	
-						foundGroup = 1;
-						groupIndex = i;
-						break;
-					}
-				}
-
 				string result="";
-				if(foundGroup) {
+				if(activeGroups.find(groupName) != activeGroups.end()) { //if the group exists in activeGroups
 					string username="",address="";
 					//turn the current members into a string to be sent to client
-					for(unsigned int i=0;i<activeGroups[groupIndex].members.size();i++) {
-						username = activeGroups[groupIndex].members[i].name;
-						username+=":";
-						cout << "username: " << username<<endl;
-						address = activeGroups[groupIndex].members[i].ipAddress;
-						address+=":";
-						cout << "address: " << address<<endl;
-						result += (username + address);
+					for(unsigned int i=0;i<activeGroups[groupName].size();i++) {
+						result += activeGroups[groupName][i].name + ":" + activeGroups[groupName][i].ipAddress + ":";
 					}
+					result+=":";//add additional semicolon to signify end of list
 
-					cout<<"Found group and users are "<<result<<endl;
-					result+=":";
+					#ifdef DEBUG
+						cout<<"Found group and users are "<<result<<endl;
+					#endif
 
-					//add the newMember to the group
-					activeGroups[groupIndex].members.push_back(newMember);
+					//finally add the newMember to the group
+					activeGroups[groupName].push_back(newMember);
 				} else {
-					cout<<"Creating new group "<<groupName<<" with "<<newMember.name<<endl;
-					///create a new group
-					group newGroup;
-					newGroup.groupName = groupName;
-					newGroup.members.push_back(newMember);	
-					/*
-					result+=newMember.name;
-					result+=":";
-					result+=newMember.ipAddress;
-					*/
-					result+="::";
-					activeGroups.push_back(newGroup);		
+					#ifdef DEBUG
+						cout<<"Creating new group "<<groupName<<" with "<<newMember.name<<endl;
+					#endif	
+
+					///create a new group and add the member
+					activeGroups[groupName].push_back(newMember);		
+
+					result+="::"; // notify the client that its a new group 
 				}
 				if(sendto(sockfd,result.c_str(),strlen(result.c_str()),0,(struct sockaddr*)&clientaddr,sizeof(clientaddr))<0){
 						perror("client send to error");

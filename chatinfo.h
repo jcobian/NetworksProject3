@@ -7,11 +7,4 @@ typedef struct member {
 	string name;
 	string ipAddress;
 } member;
-
-typedef struct group {
-		
-	string groupName;
-	vector <member> members;
-
-} group;
 #endif
