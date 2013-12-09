@@ -27,13 +27,12 @@ using namespace std;
 
 int main(int argc, char**argv)
 {
-
 	if(argc !=2 ) {
 		printf("usage: ./server <port number>\n");
 		exit(1);
 	}
 	int portNumber = atoi(argv[1]);
-	printf("Connecting on port %d\n",portNumber);
+	
 	////////////////////////////////////
 	// Setup and Connection 
 	// 
@@ -65,20 +64,14 @@ int main(int argc, char**argv)
 	}
 	socklen_t len = sizeof clientaddr;
 	char messageType[2];
-	int ibytes,obytes;
+
+
+	//////////////////////////////////////
+	//main loop listening for incoming UDP packets
+	//
 	vector<group> activeGroups;	
-/*	
-	#ifdef DEBUG
-		group newGroup;
-		newGroup.groupName = "Irish";
-		activeGroups.push_back(newGroup);
-		group newGroup2;
-		newGroup2.groupName = "Gold";
-		activeGroups.push_back(newGroup2);
-	#endif*/
-	while(1) {
-		ibytes = 0;
-		obytes = 0;
+
+	while(1) { 
 		memset((char*)&messageType,0,sizeof(messageType));
 
 		bzero(&clientaddr, len);
@@ -87,71 +80,63 @@ int main(int argc, char**argv)
 			perror("Client-recvfrom() error");
 			exit(1);
 		}
+		//////////////////////////////////
 		//list
 		if(strcmp(messageType,"L")==0) {
-				char sendBack[2];
-				strcpy(sendBack,"G");
-				if((obytes=sendto(sockfd,sendBack,strlen(sendBack),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+
+			if(sendto(sockfd,"G",strlen("G"),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr))<0) {
+				perror("client-sendto error");
+				exit(1);
+			}
+		
+			if(activeGroups.size()==0) {
+				#ifdef DEBUG
+					printf("Active groups is empty\n");
+				#endif
+				char colons[3];
+				strcpy(colons,"::");
+				if(sendto(sockfd,colons,strlen(colons),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr))<0) {
 					perror("client-sendto error");
 					exit(1);
 				}
-				size_t i;
-				//char tempName[1024];
-				//bzero(&tempName, sizeof(tempName));
+			} else {
 				string tempName="";
-			
 				#ifdef DEBUG
-					printf("Sending group names:");
+					printf("Sending group names:\n");
 				#endif
-				if(activeGroups.size()==0) {
-					#ifdef DEBUG
-						printf("Active groups is empty\n");
-					#endif
-					char colons[3];
-					strcpy(colons,"::");
-					if((obytes=sendto(sockfd,colons,strlen(colons),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
-						perror("client-sendto error");
-						exit(1);
-					}
-				} else {
-					for(i=0;i<activeGroups.size();i++) {
-						tempName+=activeGroups[i].groupName;
-						tempName+=":";
-						//strcat(tempName,activeGroups[i].groupName);
-						//strcat(tempName,":");
-						if(i==activeGroups.size()-1) {
-							//strcat(tempName,":");
-							tempName+=":";
-						}
-					}
-					#ifdef DEBUG
-						cout<<tempName<<endl;
-					#endif
 
-					if((obytes=sendto(sockfd,tempName.c_str(),strlen(tempName.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
-						perror("client-sendto error");
-						exit(1);
+				for(size_t i=0;i<activeGroups.size();i++) {
+					tempName+=activeGroups[i].groupName;
+					tempName+=":";
+					if(i==activeGroups.size()-1) {
+						tempName+=":";
 					}
 				}
-						
+				#ifdef DEBUG
+					cout<<tempName<<endl;
+				#endif
+
+				if(sendto(sockfd,tempName.c_str(),strlen(tempName.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr))<0) {
+					perror("client-sendto error");
+					exit(1);
+				}
+			}
+					
 		}
+		//////////////////////////////////
+		//join
 		else if (strcmp(messageType,"J")==0) {
-			//join
-			char inbuffer[4096];
+			char inbuffer[1024];
 			memset((char*)&inbuffer,0,sizeof(inbuffer));
-			if((ibytes=recvfrom(sockfd,inbuffer,sizeof(inbuffer),0,(struct sockaddr *)&clientaddr,&len))==-1) {
+			if(recvfrom(sockfd,inbuffer,sizeof(inbuffer),0,(struct sockaddr *)&clientaddr,&len)<0) {
 				perror("Client-recvfrom() error");
 				exit(1);
 			}
+
 			#ifdef DEBUG
 				printf("GroupUser combo Receive: %s\n",inbuffer);
 			#endif
-			/*char *pch = strtok(inbuffer,":");
-			char groupName[1024];
-			strcpy(groupName,pch);
-			char userName[1024];
-			pch = strtok(NULL,":");
-			strcpy(userName,pch);*/
+
 			string groupName="",userName="";
 			string line = inbuffer;
 			string s;
@@ -162,15 +147,14 @@ int main(int argc, char**argv)
 			userName = s;
 			
 			#ifdef DEBUG
-			//	printf("Join: group name is %s, username is %s\n",groupName,userName);
-				cout<<"Join: group name is "<<groupName<< ", username is "<<userName<<endl;
+				cout<<"Join: group name "<<groupName<< ", username "<<userName<<endl;
 			#endif
 			string messageSuccess="S";
-			if(groupName.length()==0 || userName.length()==0) {
+			if(groupName.length()==0 || userName.length()==0) { //no groupsname or username was received
 				messageSuccess="F";
 			}
 			//send the message success status
-			if((obytes=sendto(sockfd,messageSuccess.c_str(),strlen(messageSuccess.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+			if(sendto(sockfd,messageSuccess.c_str(),strlen(messageSuccess.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr))<0) {
 				perror("client-sendto error");
 				exit(1);
 			}
@@ -179,17 +163,15 @@ int main(int argc, char**argv)
 			#endif
 
 
+			//we succesfully recieved the groupname and username, so now attempt to add them to our list
 			if(messageSuccess=="S") {
-				size_t i;
 				int foundGroup = 0; //boolean 0 if the group is not found, 1 if it is
 				int groupIndex; //the index of what group the member should be added to
 				member newMember;
 				newMember.name = userName;
-				//strcpy(newMember.name,userName.c_str());
 				newMember.ipAddress = inet_ntoa(clientaddr.sin_addr);
 
-				for(i=0;i<activeGroups.size();i++) { //success 
-					//if(strcmp(groupName.c_str(),activeGroups[i].groupName)==0)
+				for(size_t i=0;i<activeGroups.size();i++) { //success 
 					if(groupName==activeGroups[i].groupName) {	
 						foundGroup = 1;
 						groupIndex = i;

@@ -217,7 +217,7 @@ bool leaveList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, str
 		return true;
 	}
 	else { //failure do something
-		cout<<"Failed to leave list due to server issue"<<endl;
+		cout << "Error: Server didn't receive message to leave.  Try again or contact your network administrator"<<endl;
 		return false;
 	}
 }
@@ -456,10 +456,6 @@ int main(int argc, char **argv)
 						cur_group = "P2PChat";
 					}
 				}
-				else {
-					cout << "Error: Server didn't receive message to leave.  Try again or contact your network administrator"<<endl;
-				}
-
 			}
 			else {
 				//TODO chat
