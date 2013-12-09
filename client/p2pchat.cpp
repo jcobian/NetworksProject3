@@ -31,11 +31,10 @@
 
 //TODO actually send the message to everyone
 //If you receive a message, pass it on to everyone else
-//when you leave, tell the server
 //
 //ADVANCED:
 //ping the server every 2 minutes to 'stay alive'
-//reconnection behavior if a user leaves
+//reconnection behavior if a user leaves for the remaining users
 //file transfer
 //nicer UI
 
@@ -65,9 +64,36 @@ void sendMessage(string message) {
 	#endif
 	for(int i=0; i<other_users.size(); i++) {
 		cout << "sockfd: "<<other_users[i].sockfd << " sockaddr:"<<other_users[i].ip_address<<endl;
-		//actually forward the message here
 		
-		//sendto(sockfd, message.c_str(), message.length(),0,(struct sockaddr *) &servaddr, sizeof(servaddr));
+		if(send(other_users[i].sockfd, message.c_str(), message.length(),0)<0) {
+			perror("ERROR sending data");
+		}
+	}
+}
+
+//on a timer, spawn listeners for messages
+void *checkForMessages(void * input) {
+
+	//always listen for messages on a timer
+	while(1) {
+		usleep(1000000);
+
+		for(int i=0; i<other_users.size(); i++) {
+			//actually forward the message here
+
+			char message[1024];
+			bzero(message, sizeof(message));
+
+			socklen_t len = sizeof(other_users[i].sockaddr);
+
+//			cout << "receiving from: "<<other_users[i].sockfd<<" ip: " <<other_users[i].ip_address << "port: " <<ntohs(other_users[i].sockaddr.sin_port) <<endl;
+			
+			//if a message was received print it out
+			//TODO and forward to everyone else
+			if(recv(other_users[i].sockfd, message, sizeof(message),0)>=0){
+				cout << message << endl;
+			}
+		}
 	}
 }
 
@@ -116,64 +142,69 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 		}
 		string line = recvline;
 		#ifdef DEBUG
-			cout<<"Received groupUser of "<<line<<endl;
+//			cout<<"Received groupUser of "<<line<<endl;
 		#endif
 
-		vector<string> user_ips;
-		string s;
-		stringstream ss(line);
-		int i=0;
-		cout<<"List of Users.."<<endl;
-		while(getline(ss, s, ':')){ 
-			if(!s.empty())//the last one's will be empty (because of the double "::") so ignore them
-			if(i%2==0) { //even number so username
-				cout<<s<<":";
-			}else { //odd number so ip address
-				cout<<s<<endl;
-				user_ips.push_back(s);
-			}	
-			i++;
+		if(line == "::"){
+			cout <<"Group did not exist so new group was created"<<endl;
 		}
-
-		//now try to connect to one of the other ips
-		for(int i=0; i<user_ips.size(); i++)
-		{
-			cout << "Attempting to connect to: "<< user_ips[i]<<endl;
-
-			//try to connect to the ip on port 9421
-			
-			int cli_sockfd, n;
-			struct sockaddr_in cliaddr;
-
-	        //create the socket
-			cli_sockfd=socket(AF_INET,SOCK_STREAM,0);
-			if(cli_sockfd < 0) {
-					perror("ERROR opening socket");
+		else {
+			vector<string> user_ips;
+			string s;
+			stringstream ss(line);
+			int i=0;
+			cout<<"List of Users.."<<endl;
+			while(getline(ss, s, ':')){ 
+				if(!s.empty())//the last one's will be empty (because of the double "::") so ignore them
+				if(i%2==0) { //even number so username
+					cout<<s<<":";
+				}else { //odd number so ip address
+					cout<<s<<endl;
+					user_ips.push_back(s);
+				}	
+				i++;
 			}
 
-	        //build server inet address
-			bzero(&cliaddr,sizeof(cliaddr));
-			cliaddr.sin_family = AF_INET;
-			cliaddr.sin_addr.s_addr=inet_addr((user_ips[i].c_str())); //the address
-			cliaddr.sin_port=htons(PORT); //the port
+			//now try to connect to one of the other ips
+			for(int i=0; i<user_ips.size(); i++)
+			{
+				cout << "Attempting to connect to: "<< user_ips[i]<<endl;
 
-			//connect
-			if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) 
-					perror("ERROR connecting");
-			//connection was succesful, so add this ip to the list of other users
-			else {
-				cout <<"connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
-				//add this user to other_users
-				user temp_user;
-				temp_user.sockfd = cli_sockfd;
-				temp_user.sockaddr = cliaddr;
-				temp_user.ip_address = user_ips[i];
-				other_users.push_back(temp_user);
-				break;
+				//try to connect to the ip on port 9421
+				
+				int cli_sockfd, n;
+				struct sockaddr_in cliaddr;
+
+				//create the socket
+				cli_sockfd=socket(AF_INET,SOCK_STREAM,0);
+				if(cli_sockfd < 0) {
+						perror("ERROR opening socket");
+				}
+
+				//build server inet address
+				bzero(&cliaddr,sizeof(cliaddr));
+				cliaddr.sin_family = AF_INET;
+				cliaddr.sin_addr.s_addr=inet_addr((user_ips[i].c_str())); //the address
+				cliaddr.sin_port=htons(PORT); //the port
+
+				//connect
+				if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) 
+						perror("ERROR connecting");
+				//connection was succesful, so add this ip to the list of other users
+				else {
+					cout <<"connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
+					//add this user to other_users
+					user temp_user;
+					temp_user.sockfd = cli_sockfd;
+					temp_user.sockaddr = cliaddr;
+					temp_user.ip_address = user_ips[i];
+					other_users.push_back(temp_user);
+					break;
+				}
 			}
-		}
 
-		return true;
+			return true;
+		}
 	}
 	else {
 		//failure do something
@@ -312,12 +343,20 @@ void *listenForConnections(void *input) {
 
         printf("New client accepted!\n");
         printf("\tNew client address:%s\n",inet_ntoa(cliaddr.sin_addr));
-        printf("\tClient port:%d\n",cliaddr.sin_port);
+        printf("\tClient port:%d\n",ntohs(cliaddr.sin_port));
+
+		//set socket to NONBlocking
+		int on = fcntl(connfd,F_GETFL);
+		on = (on | O_NONBLOCK);
+		if(fcntl(connfd,F_SETFL,on) < 0)
+		{
+			perror("turning NONBLOCKING on failed\n");
+		}
 
 		//TODO if were're in the correct group, add the info to
 		//other_users
 		user temp_user;
-		temp_user.sockfd = sockfd;
+		temp_user.sockfd = connfd;
 		temp_user.sockaddr = cliaddr;
 		temp_user.ip_address = inet_ntoa(cliaddr.sin_addr);
 		other_users.push_back(temp_user);
@@ -339,12 +378,18 @@ int main(int argc, char **argv)
 	pthread_t thread;
 	int status = pthread_create(&thread, NULL, listenForConnections, &info);
 
+	//spawn thread to receive messages from incoming TCP connections
+	int info2;
+	pthread_t thread2;
+	status = pthread_create(&thread2, NULL, checkForMessages, &info2);
+
 	#ifdef DEBUG
 		if(status)
 			printf("Error creating thread for TCP listening: %i\n", status);
 		else
 			printf("Listening for TCP connections (Thread created)\n");
 	#endif
+
 
 
 	int sockfd, n;
@@ -381,10 +426,8 @@ int main(int argc, char **argv)
 		//convert IP to a string, store in ipstr
 		inet_ntop(p->ai_family,addr,ipstr,sizeof ipstr);
 	}
-	//CHAS: this was causing me compilation problems, hopefully will fix it later?
+	//this was causing me compilation problems, hopefully will fix it later? -CHAS
 	//free(addrinfo);	
-
-
 
 	//create the socket
     sockfd=socket(AF_INET,SOCK_DGRAM,0);
@@ -414,7 +457,7 @@ int main(int argc, char **argv)
 		getline(cin, input);
 
 		if(cur_group == "P2PChat"){ //Not currently in a chat group
-			if(input== "list") {
+			if(input== "list"){
 				requestList(sockfd, &servaddr, sizeof(servaddr));
 			}
 			else if(input.substr(0, input.find(' ')) == "join"){
@@ -440,15 +483,15 @@ int main(int argc, char **argv)
 			}
 		}
 		else { //Currently in a chat group!
-
-			if(input == "leave" || input == "quit"){ //both leave and quit should tell server and close all connections gracefully
+	
+			//both leave and quit should tell server and close all connections gracefully
+			if(input == "leave" || input == "quit"){
 				if(leaveList(sockfd, &servaddr, sizeof(servaddr), listName, userName)){
-					//if leaveList was succesful, close all other connections
 					closeAllConnections();	
 
 					if(input=="quit") { //assuming everything closed correctly, now quit 
 						printf("Bye!\n");
-						exit(1); //- exit the program 
+						exit(1);
 					}
 					else { //'leave'
 						//TODO the user could optionally join 
@@ -457,15 +500,12 @@ int main(int argc, char **argv)
 					}
 				}
 			}
-			else {
-				//TODO chat
+			else { //TODO chat
 				cout << "Sending: " << input << endl;
 				sendMessage(input);
 			}
 		}
 	}
-
-	
 	close(sockfd);
 	return 0;
 } //end main
