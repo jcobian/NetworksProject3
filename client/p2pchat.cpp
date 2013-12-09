@@ -17,6 +17,7 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <time.h>
+#include <vector>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -26,6 +27,25 @@
 
 using namespace std;
 
+typedef struct user {
+	int sockfd;
+	struct sockaddr_in sockaddr;
+} user;
+
+vector<user> other_users; //vector of ips representing all users currently connected to
+
+//send a message to all the other users in other_users
+void sendMessage(string message) {
+	#ifdef DEBUG
+		cout << "Forwarding message to: ";
+	#endif
+	for(int i=0; i<other_users.size(); i++) {
+		cout << "sockfd: "<<other_users[i].sockfd << " sockaddr:"<<other_users[i].sockaddr.sin_addr.s_addr<<endl;
+		//actually forward the message here
+		
+		//sendto(sockfd, message.c_str(), message.length(),0,(struct sockaddr *) &servaddr, sizeof(servaddr));
+	}
+}
 
 bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, string listName, string userName)
 {
@@ -35,7 +55,7 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 		exit(1);
 	}
 	#ifdef DEBUG
-	cout<<"Sent message type of J"<<endl;
+//	cout<<"Sent message type of J"<<endl;
 	#endif
 	listName += ":";
 	string result = listName + userName;
@@ -47,13 +67,7 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 	#ifdef DEBUG
 		cout<<"Sent list and user of "<<result<<endl;
 	#endif
-/*
-	userName += ":";
-	if(sendto(sockfd,userName.c_str(),strlen(userName.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
-		perror("ERROR connecting");
-		exit(1);
-	}
-*/
+
 	//receive message type
 	char recvline[1024];
 	bzero(recvline, sizeof(recvline));
@@ -78,9 +92,10 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 		}
 		string line = recvline;
 		#ifdef DEBUG
-			//cout<<"Received groupUser of "<<line<<endl;
+			cout<<"Received groupUser of "<<line<<endl;
 		#endif
 
+		vector<string> user_ips;
 		string s;
 		stringstream ss(line);
 		int i=0;
@@ -91,9 +106,48 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 				cout<<s<<":";
 			}else { //odd number so ip address
 				cout<<s<<endl;
+				user_ips.push_back(s);
 			}	
 			i++;
 		}
+
+		//now try to connect to one of the other ips
+		for(int i=0; i<user_ips.size(); i++)
+		{
+			cout << "Attempting to connect to: "<< user_ips[i]<<endl;
+
+			//try to connect to the ip on port 9421
+			
+			int cli_sockfd, n;
+			struct sockaddr_in cliaddr;
+
+	        //create the socket
+			cli_sockfd=socket(AF_INET,SOCK_STREAM,0);
+			if(cli_sockfd < 0) {
+					perror("ERROR opening socket");
+			}
+
+	        //build server inet address
+			bzero(&cliaddr,sizeof(cliaddr));
+			cliaddr.sin_family = AF_INET;
+			cliaddr.sin_addr.s_addr=inet_addr((user_ips[i].c_str())); //the address
+			cliaddr.sin_port=htons(9425); //the port
+
+			//connect
+			if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) 
+					perror("ERROR connecting");
+			//connection was succesful, so add this ip to the list of other users
+			else {
+				cout <<"connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
+				//add this user to other_users
+				user temp_user;
+				temp_user.sockfd = cli_sockfd;
+				temp_user.sockaddr = cliaddr;
+				other_users.push_back(temp_user);
+				break;
+			}
+		}
+
 		return true;
 	}
 	else {
@@ -146,6 +200,21 @@ void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 			}
 		}
 	}
+}
+
+//close all connections to other users
+//effectively do so by iterating through other_users and closing the connections
+void closeAllConnections()
+{
+	for(int i=0; i<other_users.size(); i++) {
+
+		//close(other_users[i]);
+		//cout << "closing connection to: "<<other_users[i]<<endl;
+
+	}
+
+	//finally clear the other_users vector
+	other_users.clear();	
 }
 
 int main(int argc, char **argv)
@@ -248,19 +317,21 @@ int main(int argc, char **argv)
 		}
 		else { //Currently in a chat group!
 			if(input == "leave"){
-				//leave - leave the group, closing all group connections. TODO the user could optionally join 
+				closeAllConnections();	
+				//TODO the user could optionally join 
 				//another group.
 				cur_group = "P2PChat";
 			}
 			else if(input == "quit"){
+				closeAllConnections();	
 				printf("Bye!\n");
-				//TODO close all connections
 				//- exit the program, closing all group connections.
 				exit(1);
 			}
 			else {
 				//TODO chat
 				cout << "Sending: " << input << endl;
+				sendMessage(input);
 			}
 		}
 	}
