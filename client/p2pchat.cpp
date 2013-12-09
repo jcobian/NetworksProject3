@@ -189,7 +189,7 @@ int main(int argc, char **argv)
 		//convert IP to a string, store in ipstr
 		inet_ntop(p->ai_family,addr,ipstr,sizeof ipstr);
 	}
-	free(addrinfo);	
+	//free(addrinfo);	
 
 
 

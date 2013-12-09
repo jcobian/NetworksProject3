@@ -127,10 +127,11 @@ int main(int argc, char**argv)
 					#ifdef DEBUG
 						cout<<tempName<<endl;
 					#endif
-				}
-				if((obytes=sendto(sockfd,tempName.c_str(),strlen(tempName.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
-					perror("client-sendto error");
-					exit(1);
+
+					if((obytes=sendto(sockfd,tempName.c_str(),strlen(tempName.c_str()),0,(struct sockaddr *)&clientaddr,sizeof(clientaddr)))<0) {
+						perror("client-sendto error");
+						exit(1);
+					}
 				}
 						
 		}
