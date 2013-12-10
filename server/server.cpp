@@ -56,6 +56,10 @@ void *dropSilent(void * input) {
 					it->second.erase(it->second.begin()+i); //so remove this user
 				}
 			}
+
+			if(it->second.empty()) { //if this group no longer has users we should probably remove it
+				activeGroups.erase(it);
+			}
 		}
 	}
 	return 0;

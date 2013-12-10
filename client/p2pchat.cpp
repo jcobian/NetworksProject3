@@ -625,9 +625,6 @@ int main(int argc, char **argv)
 						exitProgram(sockfd);
 					}
 					else { //'leave'
-						//TODO the user could optionally join 
-						//another group.
-						
 						//stop listening for messages
 						pthread_cancel(incoming_connections);
 						pthread_cancel(incoming_messages);
