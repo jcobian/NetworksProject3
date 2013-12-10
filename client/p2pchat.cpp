@@ -26,12 +26,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-#define DEBUG
+//#define DEBUG
 
-#define PORT 9425
+#define PORT 9462
 
-//TODO when one person leaves all of a sudden everyone else starts getting newlines
-//in their chat window... why?....
 
 //TODO ADVANCED:
 //ping the server every 2 minutes to 'stay alive'
@@ -45,7 +43,11 @@ using namespace std;
 pthread_mutex_t server_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct thread_info {
+	string userName;
 	string groupName;
+	int sockfd;
+	struct sockaddr_in * servaddr;
+	socklen_t servlen;
 } thread_info;
 
 typedef struct user {
@@ -118,6 +120,35 @@ void sendMessage(string message, string groupName, string userName, int ignoreUs
 			}
 		}
 	}
+}
+
+//runs on seperate thread, pings the server every two minutes to let know that still active
+void *pingServer(void * input) {
+	
+	thread_info* info = (thread_info*)input;
+
+	while(1) {
+		usleep(100000000);//a little less than 2 minutes (to be on the safe side)
+//		usleep(5000000);//a little less than 5 seconds for testing
+
+		//send flag
+		if(sendto(info->sockfd,"P", strlen("P"),0, (struct sockaddr *)info->servaddr, info->servlen) < 0) {
+			perror("ERROR connecting");
+			exitProgram(info->sockfd);
+		}
+
+		//send current user and group
+		string result = info->groupName + ":" + info->userName + ":";
+		if(sendto(info->sockfd,result.c_str(), strlen(result.c_str()),0, (struct sockaddr *)info->servaddr, info->servlen) < 0) {
+			perror("ERROR connecting");
+			exitProgram(info->sockfd);
+		}
+		#ifdef DEBUG
+			cout<<"Sent Ping"<<endl;
+		#endif
+
+	}
+
 }
 
 //runs on seperate thread, every so often check all open TCP connections and if new messages have come in
@@ -470,8 +501,6 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-
-
 	int sockfd, n;
 	struct sockaddr_in servaddr;
 
@@ -531,8 +560,8 @@ int main(int argc, char **argv)
 	string listName = "none";
 	string userName = "none";
 
-	pthread_t incoming_connections;
-	pthread_t incoming_messages;
+	pthread_t incoming_connections, incoming_messages, ping_server;
+	
 
 	while(1) { //main program while loop
 
@@ -561,9 +590,17 @@ int main(int argc, char **argv)
 					int status = pthread_create(&incoming_connections, NULL, listenForConnections, &info);
 
 					//spawn thread to receive messages from incoming TCP connections
-					thread_info info2;
-					info2.groupName = cur_group;
-					status = pthread_create(&incoming_messages, NULL, checkForMessages, &info2);
+					thread_info t_info;
+					t_info.groupName = cur_group;
+					t_info.userName = userName;
+					t_info.sockfd = sockfd;
+					t_info.servaddr = &servaddr;
+					t_info.servlen = sizeof(servaddr);
+					status = pthread_create(&incoming_messages, NULL, checkForMessages, &t_info);
+
+					//spawn thread to ping the server every two minutes
+					status = pthread_create(&ping_server, NULL, pingServer, &t_info);
+
 				}
 			}
 			else if(input == "quit"){
@@ -594,6 +631,7 @@ int main(int argc, char **argv)
 						//stop listening for messages
 						pthread_cancel(incoming_connections);
 						pthread_cancel(incoming_messages);
+						pthread_cancel(ping_server);
 						cur_group = "P2PChat";
 					}
 				}

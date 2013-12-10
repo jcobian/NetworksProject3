@@ -22,10 +22,44 @@
 #include <sstream>
 #include "../chatinfo.h"
 #include <map>
+#include <vector>
+
+#include <pthread.h>
 
 #define DEBUG
 
 using namespace std;
+
+
+map<string, vector<member> > activeGroups;	//key is the name of the group, value is a vector of members
+
+//runs on a seperate thread, every so often check all users, and if any haven't checked in with a ping
+//in some amount of time, drop them
+void *dropSilent(void * input) {
+
+	while(1) {
+		usleep(120000000); //every 2 minutes
+//		usleep(5200000); //every 5 seconds for testing 
+
+		//iterate over available groups 
+		for( map<string,vector<member> >::iterator it=activeGroups.begin(); it!=activeGroups.end(); ++it) {
+			vector<member> v_m = it->second;
+			//iterate over the users
+			for(unsigned int i=0; i<v_m.size(); i++){
+				#ifdef DEBUG
+					cout << "possible drop of: " << v_m[i].name << " : " << v_m[i].recent_ping<<endl;
+				#endif
+				if(v_m[i].recent_ping+120 < time(NULL)) {//its been 2 minutes since the last ping
+					#ifdef DEBUG
+						cout << "removing user " << v_m[i].name << endl;
+					#endif
+					it->second.erase(it->second.begin()+i); //so remove this user
+				}
+			}
+		}
+	}
+	return 0;
+}
 
 int main(int argc, char**argv)
 {
@@ -68,10 +102,16 @@ int main(int argc, char**argv)
 	char messageType[2];
 
 
+	/////////////////////////////////////
+	//spawn thread for ping dropping
+	pthread_t ping_thread;
+	int info;
+	pthread_create(&ping_thread, NULL, dropSilent, &info);
+
+
 	//////////////////////////////////////
 	//main loop listening for incoming UDP packets
 	//
-	map<string, vector<member> > activeGroups;	//key is the name of the group, value is a vector of members
 
 	while(1) { 
 		memset((char*)&messageType,0,sizeof(messageType));
@@ -173,6 +213,7 @@ int main(int argc, char**argv)
 			if(messageSuccess=="S") {
 				member newMember;
 				newMember.name = userName;
+				newMember.recent_ping = time(NULL);
 				newMember.ipAddress = inet_ntoa(clientaddr.sin_addr);
 
 				//create a new group and add the member
@@ -200,6 +241,56 @@ int main(int argc, char**argv)
 					
 			}//ends else when group and username actually have a length
 		} 
+		//////////////////////////////////
+		//ping
+		else if (strcmp(messageType,"P")==0) {
+
+			//receive the group:user
+			char inbuffer[1024];
+			memset((char*)&inbuffer,0,sizeof(inbuffer));
+			if(recvfrom(sockfd,inbuffer,sizeof(inbuffer),0,(struct sockaddr *)&clientaddr,&len)<0) {
+				perror("Client-recvfrom() error");
+				exit(1);
+			}
+
+			string groupName="",userName="";
+			string line = inbuffer;
+			string s;
+			stringstream ss(line);
+			getline(ss,s,':');
+			groupName = s;
+			getline(ss,s,':');
+			userName = s;
+
+			if(groupName.length()!=0 && userName.length()!=0) { //we succesfully recieved the groupname and username, so now attempt to remove them from the desired list
+
+				if(activeGroups.find(groupName) != activeGroups.end()) { //if the group exists in activeGroups
+					//now update recent_ping for user from the group
+					for(unsigned int i=0;i<activeGroups[groupName].size();i++) {
+						if(activeGroups[groupName][i].name == userName) {
+
+							//update the recent time timestamp
+							activeGroups[groupName][i].recent_ping = time(NULL);
+
+							#ifdef DEBUG
+								cout<<"Recieved ping from user: "<<userName<< " in: "<<groupName<<endl;
+							#endif
+						}
+					}
+				} else { 
+					cout << "ERROR: User pinged from a group that doesn't exist?"<<endl;
+				}
+			}
+
+			#ifdef DEBUG
+				//now remove that user from the group
+				for(unsigned int i=0;i<activeGroups[groupName].size();i++) {
+
+					cout << activeGroups[groupName][i].name << " : "<<activeGroups[groupName][i].recent_ping << endl;
+
+				}
+			#endif
+		}
 		//////////////////////////////////
 		//leave
 		else if (strcmp(messageType,"Q")==0) {

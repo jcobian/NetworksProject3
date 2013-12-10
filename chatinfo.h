@@ -6,5 +6,6 @@ using namespace std;
 typedef struct member {
 	string name;
 	string ipAddress;
+	time_t recent_ping;
 } member;
 #endif
