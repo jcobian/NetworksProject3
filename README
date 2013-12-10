@@ -1,0 +1,19 @@
+Jonathan Cobian, Chas Jhin, Jason Wassel
+chatinfo.h - contains a struct used by both the client and the server which represents a member
+Two subdirectories: client and server
+Within client:
+	p2pchat.cpp
+	makefile
+Within server:
+	server.cpp
+	makefile
+To compile run the makefiles within both the client and server sub directories. To run the server simply run ./server <port number>.
+To run the client run ./p2pchat student0x.cse.nd.edu:<port>
+Functionality of the chat client is the same as in your document. 
+Type list to view the list of groups
+type join <groupName> <userName> to join group groupName as user userName. If the group does not exist it will be created. 
+Type send to initiate sending a message then type your message
+Type leave to leave your current group
+Type quit to quit the program and gracefully close all connections
+
+Advanced functionality: In addition to the server removing users who have timed out, we also have created a functionality to gracefully quit on their own. If a user manually leaves or quits, the client notifies all necessary parties including the other clients and servers to gracefully close with minimal resource waste.  
