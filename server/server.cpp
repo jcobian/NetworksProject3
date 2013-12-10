@@ -175,31 +175,21 @@ int main(int argc, char**argv)
 				newMember.name = userName;
 				newMember.ipAddress = inet_ntoa(clientaddr.sin_addr);
 
+				//create a new group and add the member
+				activeGroups[groupName].push_back(newMember);
+
 				string result="";
-				if(activeGroups.find(groupName) != activeGroups.end()) { //if the group exists in activeGroups
-					string username="",address="";
-					//turn the current members into a string to be sent to client
-					for(unsigned int i=0;i<activeGroups[groupName].size();i++) {
-						result += activeGroups[groupName][i].name + ":" + activeGroups[groupName][i].ipAddress + ":";
-					}
-					result+=":";//add additional semicolon to signify end of list
-
-					#ifdef DEBUG
-						cout<<"Found group and users are "<<result<<endl;
-					#endif
-
-					//finally add the newMember to the group
-					activeGroups[groupName].push_back(newMember);
-				} else {
-					#ifdef DEBUG
-						cout<<"Creating new group "<<groupName<<" with "<<newMember.name<<endl;
-					#endif	
-
-					///create a new group and add the member
-					activeGroups[groupName].push_back(newMember);		
-
-					result+="::"; // notify the client that its a new group 
+				string username="",address="";
+				//turn the current members into a string to be sent to client
+				for(unsigned int i=0;i<activeGroups[groupName].size();i++) {
+					result += activeGroups[groupName][i].name + ":" + activeGroups[groupName][i].ipAddress + ":";
 				}
+				result+=":";//add additional semicolon to signify end of list
+
+				#ifdef DEBUG
+					cout<<"Found group and users are "<<result<<endl;
+				#endif
+
 				if(sendto(sockfd,result.c_str(),strlen(result.c_str()),0,(struct sockaddr*)&clientaddr,sizeof(clientaddr))<0){
 						perror("client send to error");
 						exit(1);	

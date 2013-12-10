@@ -225,82 +225,82 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 //			cout<<"Received groupUser of "<<line<<endl;
 		#endif
 
-		if(line == "::"){
-			cout <<"Group did not exist so new group was created"<<endl;
-		}
-		else {
-			vector<string> user_ips;
-			string s;
-			stringstream ss(line);
-			int i=0;
-			cout<<"List of Users.."<<endl;
-			while(getline(ss, s, ':')){ 
-				if(!s.empty())//the last one's will be empty (because of the double "::") so ignore them
-				if(i%2==0) { //even number so username
+		vector<string> user_ips;
+		string s;
+		stringstream ss(line);
+		int i=0;
+		cout<<"List of Users.."<<endl;
+		//parse the list
+		while(getline(ss, s, ':')){ 
+			if(!s.empty())//the last one's will be empty (because of the double "::") so ignore them
+			if(i%2==0) { //even number so username
+				cout<<s<<endl;
+				if(s == userName){ //ourself
+					getline(ss,s,':');
+					i++;
+				}
+			}else { //odd number so ip address
+				#ifdef DEBUG
 					cout<<s<<endl;
-				}else { //odd number so ip address
-					#ifdef DEBUG
-						cout<<s<<endl;
-					#endif
-					user_ips.push_back(s);
-				}	
-				i++;
-			}
-
-			//now try to connect to one of the other ips
-			for(int i=0; i<user_ips.size(); i++)
-			{
-				//try to connect to the ip on port 9421
-				
-				int cli_sockfd, n;
-				struct sockaddr_in cliaddr;
-
-				//create the socket
-				cli_sockfd=socket(AF_INET,SOCK_STREAM,0);
-				if(cli_sockfd < 0) {
-						perror("ERROR opening socket");
-				}
-
-				//build server inet address
-				bzero(&cliaddr,sizeof(cliaddr));
-				cliaddr.sin_family = AF_INET;
-				cliaddr.sin_addr.s_addr=inet_addr((user_ips[i].c_str())); //the address
-				cliaddr.sin_port=htons(PORT); //the port
-
-
-
-				//connect
-				if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) {
-					//#ifdef DEBUG
-						cout <<"ERROR connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
-					//#endif
-				}
-				//connection was succesful, so add this ip to the list of other users
-				else {
-					//set socket to NONBlocking
-					int on = fcntl(cli_sockfd,F_GETFL);
-					on = (on | O_NONBLOCK);
-					if(fcntl(cli_sockfd,F_SETFL,on) < 0)
-					{
-						perror("turning NONBLOCKING on failed\n");
-					}
-
-					//#ifdef DEBUG
-						cout <<"connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
-					//#endif
-
-					//add this user to other_users
-					user temp_user;
-					temp_user.sockfd = cli_sockfd;
-					temp_user.sockaddr = cliaddr;
-					temp_user.ip_address = user_ips[i];
-					other_users.push_back(temp_user);
-					break;
-				}
-			}
-
-			return true;
+				#endif
+				user_ips.push_back(s);
+			}	
+			i++;
 		}
+
+		//now try to connect to one of the other ips
+		for(int i=0; i<user_ips.size(); i++)
+		{
+			//try to connect to the ip on port 9421
+			
+			int cli_sockfd, n;
+			struct sockaddr_in cliaddr;
+
+			//create the socket
+			cli_sockfd=socket(AF_INET,SOCK_STREAM,0);
+			if(cli_sockfd < 0) {
+					perror("ERROR opening socket");
+			}
+
+			//build server inet address
+			bzero(&cliaddr,sizeof(cliaddr));
+			cliaddr.sin_family = AF_INET;
+			cliaddr.sin_addr.s_addr=inet_addr((user_ips[i].c_str())); //the address
+			cliaddr.sin_port=htons(PORT); //the port
+
+
+
+			//connect
+			if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) {
+				//#ifdef DEBUG
+					cout <<"ERROR connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
+				//#endif
+			}
+			//connection was succesful, so add this ip to the list of other users
+			else {
+				//set socket to NONBlocking
+				int on = fcntl(cli_sockfd,F_GETFL);
+				on = (on | O_NONBLOCK);
+				if(fcntl(cli_sockfd,F_SETFL,on) < 0)
+				{
+					perror("turning NONBLOCKING on failed\n");
+				}
+
+				//#ifdef DEBUG
+					cout <<"connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
+				//#endif
+
+				//add this user to other_users
+				user temp_user;
+				temp_user.sockfd = cli_sockfd;
+				temp_user.sockaddr = cliaddr;
+				temp_user.ip_address = user_ips[i];
+				other_users.push_back(temp_user);
+				break;
+			}
+		}
+
+		return true;
 	}
 	else {
 		//failure do something
