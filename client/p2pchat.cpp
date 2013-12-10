@@ -25,14 +25,15 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#define DEBUG
+
+//#define DEBUG
 
 #define PORT 9425
 
-//TODO actually send the message to everyone
-//If you receive a message, pass it on to everyone else
-//
-//ADVANCED:
+//TODO when one person leaves all of a sudden everyone else starts getting newlines
+//in their chat window... why?....
+
+//TODO ADVANCED:
 //ping the server every 2 minutes to 'stay alive'
 //reconnection behavior if a user leaves for the remaining users
 //file transfer
@@ -42,13 +43,6 @@ using namespace std;
 
 pthread_mutex_t server_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-typedef struct {
-    int connfd;
-    struct sockaddr_in cliaddr;
-    socklen_t clilen;
-
-} thread_info;
-
 typedef struct user {
 	int sockfd;
 	struct sockaddr_in sockaddr;
@@ -57,13 +51,42 @@ typedef struct user {
 
 vector<user> other_users; //vector of ips representing all users currently connected to
 
+//close all connections to other users
+//effectively do so by iterating through other_users and closing the connections
+void closeAllConnections()
+{
+	for(int i=0; i<other_users.size(); i++) {
+
+		close(other_users[i].sockfd);
+
+		#ifdef DEBUG
+			cout << "closing connection to: "<<other_users[i].ip_address<<endl;
+		#endif
+	}
+
+	//finally clear the other_users vector
+	other_users.clear();	
+}
+
+//because we have a fair amount of connections open we want to close everything gracefully before quiting the program (if possible)
+//sockfd should be the connection to the server
+void exitProgram(int sockfd) 
+{
+	closeAllConnections();
+
+	close(sockfd); 
+	exit(1);
+}
+
 //send a message to all the other users in other_users
 void sendMessage(string message) {
 	#ifdef DEBUG
 		cout << "Forwarding message to: ";
 	#endif
 	for(int i=0; i<other_users.size(); i++) {
-		cout << "sockfd: "<<other_users[i].sockfd << " sockaddr:"<<other_users[i].ip_address<<endl;
+		#ifdef DEBUG
+			cout << "sockfd: "<<other_users[i].sockfd << " sockaddr:"<<other_users[i].ip_address<<endl;
+		#endif
 		
 		if(send(other_users[i].sockfd, message.c_str(), message.length(),0)<0) {
 			perror("ERROR sending data");
@@ -71,26 +94,27 @@ void sendMessage(string message) {
 	}
 }
 
-//on a timer, spawn listeners for messages
+//runs on seperate thread, every so often check all open TCP connections and if new messages have come in
+//print them to the user but also forward to everyone else
 void *checkForMessages(void * input) {
 
-	//always listen for messages on a timer
+	//on a timer, check all connections and see if any new messages have come in
 	while(1) {
 		usleep(1000000);
 
+		//check all connections
 		for(int i=0; i<other_users.size(); i++) {
-			//actually forward the message here
+
+			socklen_t len = sizeof(other_users[i].sockaddr);
 
 			char message[1024];
 			bzero(message, sizeof(message));
-
-			socklen_t len = sizeof(other_users[i].sockaddr);
 
 			//if a message was received print it out
 			if(recv(other_users[i].sockfd, message, sizeof(message),0)>=0){
 				cout << message << endl;
 
-				//TODO and forward to everyone else
+				//And forward to everyone else
 				for(int j=0; j<other_users.size(); j++) {
 					if(i!=j) { //don't send message back to sender
 						if(send(other_users[j].sockfd, message, sizeof(message),0)<0) {
@@ -103,22 +127,18 @@ void *checkForMessages(void * input) {
 	}
 }
 
+//contact the server and attempt to join list listName with nickname userName
 bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, string listName, string userName)
 {
-	//send command
+	//send flag
 	if(sendto(sockfd,"J", strlen("J"),0, (struct sockaddr *) servaddr, servlen) < 0) {
 		perror("ERROR connecting");
-		exit(1);
+		exitProgram(sockfd);
 	}
-	#ifdef DEBUG
-//	cout<<"Sent message type of J"<<endl;
-	#endif
-	listName += ":";
-	string result = listName + userName;
-	result+=":";
+	string result = listName + ":" + userName + ":";
 	if(sendto(sockfd,result.c_str(),strlen(result.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
 		perror("ERROR connecting");
-		exit(1);
+		exitProgram(sockfd);
 	}
 	#ifdef DEBUG
 		cout<<"Sent list and user of "<<result<<endl;
@@ -130,7 +150,7 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 
 	if(recvfrom(sockfd,recvline,sizeof(recvline),0,(struct sockaddr *)servaddr,&servlen) < 0){ //this should be one byte char
 		perror("ERROR connecting");
-		exit(1);
+		exitProgram(sockfd);
 	}
 
 	string mesgType;
@@ -144,7 +164,7 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 		bzero(recvline, sizeof(recvline));	
 		if(recvfrom(sockfd,recvline,sizeof(recvline),0,(struct sockaddr *)servaddr,&servlen) < 0){ //this should be one byte char
 			perror("ERROR connecting");
-			exit(1);
+			exitProgram(sockfd);
 		}
 		string line = recvline;
 		#ifdef DEBUG
@@ -163,9 +183,11 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 			while(getline(ss, s, ':')){ 
 				if(!s.empty())//the last one's will be empty (because of the double "::") so ignore them
 				if(i%2==0) { //even number so username
-					cout<<s<<":";
-				}else { //odd number so ip address
 					cout<<s<<endl;
+				}else { //odd number so ip address
+					#ifdef DEBUG
+						cout<<s<<endl;
+					#endif
 					user_ips.push_back(s);
 				}	
 				i++;
@@ -192,11 +214,17 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 				cliaddr.sin_port=htons(PORT); //the port
 
 				//connect
-				if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) 
-					cout <<"ERROR connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
+				if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) {
+					#ifdef DEBUG
+						cout <<"ERROR connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
+					#endif
+				}
 				//connection was succesful, so add this ip to the list of other users
 				else {
-					cout <<"connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
+					#ifdef DEBUG
+						cout <<"connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
+					#endif
+
 					//add this user to other_users
 					user temp_user;
 					temp_user.sockfd = cli_sockfd;
@@ -224,14 +252,14 @@ bool leaveList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, str
 	//send command "Q" for quit list!
 	if(sendto(sockfd,"Q", strlen("Q"),0, (struct sockaddr *) servaddr, servlen) < 0) {
 		perror("ERROR connecting");
-		exit(1);
+		exitProgram(sockfd);
 	}
 	listName += ":";
 	string result = listName + userName;
 	result+=":";
 	if(sendto(sockfd,result.c_str(),strlen(result.c_str()),0, (struct sockaddr *) servaddr, servlen) < 0) {
 		perror("ERROR connecting");
-		exit(1);
+		exitProgram(sockfd);
 	}
 	#ifdef DEBUG
 		cout<<"Notified Server that this user is leaving: "<<result<<endl;
@@ -243,7 +271,7 @@ bool leaveList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, str
 
 	if(recvfrom(sockfd,recvline,sizeof(recvline),0,(struct sockaddr *)servaddr,&servlen) < 0){ //this should be one byte char
 		perror("ERROR connecting");
-		exit(1);
+		exitProgram(sockfd);
 	}
 
 	string mesgType;
@@ -262,7 +290,7 @@ void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 	//send command
 	if(sendto(sockfd,"L", 2,0, (struct sockaddr *) servaddr, servlen) < 0) {
 		perror("ERROR connecting");
-		exit(1);
+		exitProgram(sockfd);
 	}
 
 	//receive message type
@@ -270,7 +298,7 @@ void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 	bzero(recvline, sizeof(recvline));
 	if(recvfrom(sockfd,recvline,2,0,NULL,NULL) < 0){ //this should be one byte char
 		perror("ERROR connecting");
-		exit(1);
+		exitProgram(sockfd);
 	}
 
 #ifdef DEBUG
@@ -283,7 +311,7 @@ void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 		//receive actual message	
 		if(recvfrom(sockfd,recvline, 1024,0,NULL,NULL) < 0) {
 			perror("ERROR connecting");
-			exit(1);
+			exitProgram(sockfd);
 		}
 
 		string line = recvline;
@@ -302,22 +330,7 @@ void requestList(int sockfd, struct sockaddr_in * servaddr, int servlen)
 	}
 }
 
-//close all connections to other users
-//effectively do so by iterating through other_users and closing the connections
-void closeAllConnections()
-{
-	for(int i=0; i<other_users.size(); i++) {
 
-		close(other_users[i].sockfd);
-
-		#ifdef DEBUG
-			cout << "closing connection to: "<<other_users[i].ip_address<<endl;
-		#endif
-	}
-
-	//finally clear the other_users vector
-	other_users.clear();	
-}
 
 //Listen for incoming TCP connections, and if for your current group
 //add the incoming user to @other_users
@@ -347,9 +360,11 @@ void *listenForConnections(void *input) {
         clilen = sizeof(cliaddr);
         connfd = accept(sockfd,(struct sockaddr *)&cliaddr,&clilen);
 
-        printf("New client accepted!\n");
-        printf("\tNew client address:%s\n",inet_ntoa(cliaddr.sin_addr));
-        printf("\tClient port:%d\n",ntohs(cliaddr.sin_port));
+		#ifdef DEBUG
+			printf("New client accepted!\n");
+			printf("\tNew client address:%s\n",inet_ntoa(cliaddr.sin_addr));
+			printf("\tClient port:%d\n",ntohs(cliaddr.sin_port));
+		#endif
 
 		//set socket to NONBlocking
 		int on = fcntl(connfd,F_GETFL);
@@ -394,8 +409,6 @@ int main(int argc, char **argv)
 		else
 			printf("Listening for TCP connections (Thread created)\n");
 	#endif
-
-
 
 	int sockfd, n;
 	struct sockaddr_in servaddr;
@@ -481,8 +494,7 @@ int main(int argc, char **argv)
 			else if(input == "quit"){
 				printf("Bye!\n");
 				//- exit the program, closing all group connections.
-				close(sockfd);
-				exit(1);
+				exitProgram(sockfd);
 			}
 			else {
 				printf("Not a valid command\n");
@@ -497,8 +509,7 @@ int main(int argc, char **argv)
 
 					if(input=="quit") { //assuming everything closed correctly, now quit 
 						printf("Bye!\n");
-						close(sockfd);
-						exit(1);
+						exitProgram(sockfd);
 					}
 					else { //'leave'
 						//TODO the user could optionally join 
@@ -507,8 +518,7 @@ int main(int argc, char **argv)
 					}
 				}
 			}
-			else { //TODO chat
-				cout << "Sending: " << input << endl;
+			else { //chat
 				sendMessage(input);
 			}
 		}
