@@ -28,15 +28,7 @@
 
 //#define DEBUG
 
-#define PORT 9462
-
-
-//TODO ADVANCED:
-//ping the server every 2 minutes to 'stay alive'
-//reconnection behavior if a user leaves for the remaining users
-//nicer UI
-//
-//file transfer
+#define PORT 9421
 
 using namespace std;
 
@@ -314,9 +306,9 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 
 			//connect
 			if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) {
-				//#ifdef DEBUG
+				#ifdef DEBUG
 					cout <<"ERROR connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
-				//#endif
+				#endif
 			}
 			//connection was succesful, so add this ip to the list of other users
 			else {
@@ -328,9 +320,9 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 					perror("turning NONBLOCKING on failed\n");
 				}
 
-				//#ifdef DEBUG
+				#ifdef DEBUG
 					cout <<"connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
-				//#endif
+				#endif
 
 				//add this user to other_users
 				user temp_user;
