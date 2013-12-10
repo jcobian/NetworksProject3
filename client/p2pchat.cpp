@@ -26,7 +26,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-//#define DEBUG
+#define DEBUG
 
 #define PORT 9425
 
@@ -61,6 +61,12 @@ vector<user> other_users; //vector of ips representing all users currently conne
 void closeAllConnections()
 {
 	for(int i=0; i<other_users.size(); i++) {
+		//tell other use that you are terminating connection
+		//Q flag notifies that you are 'quiting' this connection
+		if(send(other_users[i].sockfd, "Q", strlen("Q"),0)<0) {
+			perror("ERROR sending data");
+			return;
+		}
 
 		close(other_users[i].sockfd);
 
@@ -94,7 +100,7 @@ void sendMessage(string message, string groupName, string userName, int ignoreUs
 				cout << "sockfd: "<<other_users[i].sockfd << " sockaddr:"<<other_users[i].ip_address<<endl;
 			#endif
 
-			//recieve data in the order of "T", groupName, original user, user_id, message length, and the actual message
+			//send data in the order of "T", groupName, original user, user_id, message length, and the actual message
 			if(send(other_users[i].sockfd, "T", strlen("T"),0)<0) {
 				perror("ERROR sending data");
 				return;
@@ -141,8 +147,13 @@ void *checkForMessages(void * input) {
 				#ifdef DEBUG
 					cout << "flag: " <<flag << endl;
 				#endif
+				if(strcmp(flag,"Q")==0) { //flag for closing the connection
+					close(other_users[i].sockfd);
+					other_users.erase(other_users.begin()+i);// remove from the other_users vector
+					break;
+				}
 
-				if(strcmp(flag,"T")==0) { //flag for text message, so start reading in everything
+				else if(strcmp(flag,"T")==0) { //flag for text message, so start reading in everything
 					char package[1024];
 					bzero(package, sizeof(package));
 					if(recv(other_users[i].sockfd, package, sizeof(package),0)<0) {
@@ -459,18 +470,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	//spawn thread to listen for incoming TCP connections
-	int info;
-	pthread_t thread;
-	int status = pthread_create(&thread, NULL, listenForConnections, &info);
 
-
-	#ifdef DEBUG
-		if(status)
-			printf("Error creating thread for TCP listening: %i\n", status);
-		else
-			printf("Listening for TCP connections (Thread created)\n");
-	#endif
 
 	int sockfd, n;
 	struct sockaddr_in servaddr;
@@ -488,7 +488,7 @@ int main(int argc, char **argv)
 	hints.ai_socktype = SOCK_DGRAM;
 	//get addr info of the ip address, feed it the hints, results stored
 	//in the servinfo which is a linked list
-	status = getaddrinfo(ap_addr,port,&hints,&servinfo);
+	int status = getaddrinfo(ap_addr,port,&hints,&servinfo);
 	if(status!=0) {
 		printf("getaddrinfo: %s\n",gai_strerror(status));
 		exit(1);
@@ -531,6 +531,9 @@ int main(int argc, char **argv)
 	string listName = "none";
 	string userName = "none";
 
+	pthread_t incoming_connections;
+	pthread_t incoming_messages;
+
 	while(1) { //main program while loop
 
 		cout << cur_group << ">";
@@ -553,11 +556,14 @@ int main(int argc, char **argv)
 					//if joinList was succesful, change the group name
 					cur_group = listName;
 
+					//spawn thread to listen for incoming TCP connections
+					int info;
+					int status = pthread_create(&incoming_connections, NULL, listenForConnections, &info);
+
 					//spawn thread to receive messages from incoming TCP connections
 					thread_info info2;
 					info2.groupName = cur_group;
-					pthread_t thread2;
-					status = pthread_create(&thread2, NULL, checkForMessages, &info2);
+					status = pthread_create(&incoming_messages, NULL, checkForMessages, &info2);
 				}
 			}
 			else if(input == "quit"){
@@ -574,6 +580,7 @@ int main(int argc, char **argv)
 			//both leave and quit should tell server and close all connections gracefully
 			if(input == "leave" || input == "quit"){
 				if(leaveList(sockfd, &servaddr, sizeof(servaddr), listName, userName)){
+
 					closeAllConnections();	
 
 					if(input=="quit") { //assuming everything closed correctly, now quit 
@@ -583,6 +590,10 @@ int main(int argc, char **argv)
 					else { //'leave'
 						//TODO the user could optionally join 
 						//another group.
+						
+						//stop listening for messages
+						pthread_cancel(incoming_connections);
+						pthread_cancel(incoming_messages);
 						cur_group = "P2PChat";
 					}
 				}
