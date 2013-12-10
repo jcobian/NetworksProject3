@@ -36,12 +36,17 @@
 //TODO ADVANCED:
 //ping the server every 2 minutes to 'stay alive'
 //reconnection behavior if a user leaves for the remaining users
-//file transfer
 //nicer UI
+//
+//file transfer
 
 using namespace std;
 
 pthread_mutex_t server_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+typedef struct thread_info {
+	string groupName;
+} thread_info;
 
 typedef struct user {
 	int sockfd;
@@ -79,17 +84,32 @@ void exitProgram(int sockfd)
 }
 
 //send a message to all the other users in other_users
-void sendMessage(string message) {
+void sendMessage(string message, string groupName, string userName, int ignoreUser) {
 	#ifdef DEBUG
-		cout << "Forwarding message to: ";
+		cout << "Forwarding message to: " << endl;
 	#endif
 	for(int i=0; i<other_users.size(); i++) {
-		#ifdef DEBUG
-			cout << "sockfd: "<<other_users[i].sockfd << " sockaddr:"<<other_users[i].ip_address<<endl;
-		#endif
-		
-		if(send(other_users[i].sockfd, message.c_str(), message.length(),0)<0) {
-			perror("ERROR sending data");
+		if(i!=ignoreUser) {
+			#ifdef DEBUG
+				cout << "sockfd: "<<other_users[i].sockfd << " sockaddr:"<<other_users[i].ip_address<<endl;
+			#endif
+
+			//recieve data in the order of "T", groupName, original user, user_id, message length, and the actual message
+			if(send(other_users[i].sockfd, "T", strlen("T"),0)<0) {
+				perror("ERROR sending data");
+				return;
+			}
+			stringstream ss;
+			ss << message.length();
+
+			string package = groupName+":"+userName+":"+ss.str()+":"+message+"::";
+			#ifdef DEBUG
+				cout << "Sending: " << package.c_str() << endl;
+			#endif
+			if(send(other_users[i].sockfd, package.c_str(), strlen(package.c_str()),0)<0) {
+				perror("ERROR sending data");
+				return;
+			}
 		}
 	}
 }
@@ -98,31 +118,65 @@ void sendMessage(string message) {
 //print them to the user but also forward to everyone else
 void *checkForMessages(void * input) {
 
+	thread_info* info = (thread_info*)input;
+
 	//on a timer, check all connections and see if any new messages have come in
 	while(1) {
 		usleep(1000000);
+
+		bool received = false;
 
 		//check all connections
 		for(int i=0; i<other_users.size(); i++) {
 
 			socklen_t len = sizeof(other_users[i].sockaddr);
 
-			char message[1024];
-			bzero(message, sizeof(message));
+			char flag[2];
+			bzero(flag, sizeof(flag));
 
-			//if a message was received print it out
-			if(recv(other_users[i].sockfd, message, sizeof(message),0)>=0){
-				cout << message << endl;
+			//if the Text flag is received, move on
+			if(recv(other_users[i].sockfd, flag, 1,0)>=0) {
+//				perror("Error in receiving message");
+//				cout << other_users[i].ip_address << endl;
+				#ifdef DEBUG
+					cout << "flag: " <<flag << endl;
+				#endif
 
-				//And forward to everyone else
-				for(int j=0; j<other_users.size(); j++) {
-					if(i!=j) { //don't send message back to sender
-						if(send(other_users[j].sockfd, message, sizeof(message),0)<0) {
-							perror("ERROR sending data");
-						}					
+				if(strcmp(flag,"T")==0) { //flag for text message, so start reading in everything
+					char package[1024];
+					bzero(package, sizeof(package));
+					if(recv(other_users[i].sockfd, package, sizeof(package),0)<0) {
+						perror("ERROR receiving data");
+					}
+					#ifdef DEBUG
+						cout << "package: " <<package<< endl;
+					#endif
+
+					string groupName, userName, messageLen, message;
+
+					stringstream ss(package);
+					getline(ss, groupName, ':');
+					getline(ss, userName, ':');
+					getline(ss, messageLen, ':');
+					getline(ss, message, ':');
+
+					if(info->groupName == groupName) {
+						if(!received)
+							cout << endl;
+
+						received= true;
+						//receive everything else...
+						cout << " From: "<<userName<<">"<<message << endl;
+
+						//And forward to everyone else
+						sendMessage(message,groupName,userName,i);
 					}
 				}
 			}
+		}
+		if(received) {
+			cout << info->groupName<<">";
+			cout << flush;
 		}
 	}
 }
@@ -213,17 +267,27 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 				cliaddr.sin_addr.s_addr=inet_addr((user_ips[i].c_str())); //the address
 				cliaddr.sin_port=htons(PORT); //the port
 
+
+
 				//connect
 				if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) {
-					#ifdef DEBUG
+					//#ifdef DEBUG
 						cout <<"ERROR connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
-					#endif
+					//#endif
 				}
 				//connection was succesful, so add this ip to the list of other users
 				else {
-					#ifdef DEBUG
+					//set socket to NONBlocking
+					int on = fcntl(cli_sockfd,F_GETFL);
+					on = (on | O_NONBLOCK);
+					if(fcntl(cli_sockfd,F_SETFL,on) < 0)
+					{
+						perror("turning NONBLOCKING on failed\n");
+					}
+
+					//#ifdef DEBUG
 						cout <<"connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
-					#endif
+					//#endif
 
 					//add this user to other_users
 					user temp_user;
@@ -353,6 +417,8 @@ void *listenForConnections(void *input) {
 
     servaddr.sin_port=htons(PORT);
 
+	setsockopt(sockfd,SOL_SOCKET,SO_REUSEADDR,(const void *)1,sizeof(int));
+
     bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
     listen(sockfd,1024);
 
@@ -398,10 +464,6 @@ int main(int argc, char **argv)
 	pthread_t thread;
 	int status = pthread_create(&thread, NULL, listenForConnections, &info);
 
-	//spawn thread to receive messages from incoming TCP connections
-	int info2;
-	pthread_t thread2;
-	status = pthread_create(&thread2, NULL, checkForMessages, &info2);
 
 	#ifdef DEBUG
 		if(status)
@@ -472,6 +534,7 @@ int main(int argc, char **argv)
 	while(1) { //main program while loop
 
 		cout << cur_group << ">";
+		cout << flush;
 		getline(cin, input);
 
 		if(cur_group == "P2PChat"){ //Not currently in a chat group
@@ -489,6 +552,12 @@ int main(int argc, char **argv)
 				if(joinList(sockfd, &servaddr, sizeof(servaddr), listName, userName)){
 					//if joinList was succesful, change the group name
 					cur_group = listName;
+
+					//spawn thread to receive messages from incoming TCP connections
+					thread_info info2;
+					info2.groupName = cur_group;
+					pthread_t thread2;
+					status = pthread_create(&thread2, NULL, checkForMessages, &info2);
 				}
 			}
 			else if(input == "quit"){
@@ -518,8 +587,10 @@ int main(int argc, char **argv)
 					}
 				}
 			}
-			else { //chat
-				sendMessage(input);
+			else if(input=="send"){ //chat
+				cout << "Send>";
+				getline(cin, input);
+				sendMessage(input,listName, userName,-1);
 			}
 		}
 	}
