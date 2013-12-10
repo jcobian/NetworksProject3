@@ -86,12 +86,18 @@ void *checkForMessages(void * input) {
 
 			socklen_t len = sizeof(other_users[i].sockaddr);
 
-//			cout << "receiving from: "<<other_users[i].sockfd<<" ip: " <<other_users[i].ip_address << "port: " <<ntohs(other_users[i].sockaddr.sin_port) <<endl;
-			
 			//if a message was received print it out
-			//TODO and forward to everyone else
 			if(recv(other_users[i].sockfd, message, sizeof(message),0)>=0){
 				cout << message << endl;
+
+				//TODO and forward to everyone else
+				for(int j=0; j<other_users.size(); j++) {
+					if(i!=j) { //don't send message back to sender
+						if(send(other_users[j].sockfd, message, sizeof(message),0)<0) {
+							perror("ERROR sending data");
+						}					
+					}
+				}
 			}
 		}
 	}
@@ -168,8 +174,6 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 			//now try to connect to one of the other ips
 			for(int i=0; i<user_ips.size(); i++)
 			{
-				cout << "Attempting to connect to: "<< user_ips[i]<<endl;
-
 				//try to connect to the ip on port 9421
 				
 				int cli_sockfd, n;
@@ -189,7 +193,7 @@ bool joinList(int sockfd, struct sockaddr_in * servaddr, socklen_t servlen, stri
 
 				//connect
 				if(connect(cli_sockfd,(struct sockaddr *) &cliaddr, sizeof(cliaddr)) < 0) 
-						perror("ERROR connecting");
+					cout <<"ERROR connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
 				//connection was succesful, so add this ip to the list of other users
 				else {
 					cout <<"connecting to: cli_sockfd="<<cli_sockfd<<" server_ip="<<user_ips[i]<<endl;
@@ -304,9 +308,11 @@ void closeAllConnections()
 {
 	for(int i=0; i<other_users.size(); i++) {
 
-		//close(other_users[i]);
-		//cout << "closing connection to: "<<other_users[i]<<endl;
+		close(other_users[i].sockfd);
 
+		#ifdef DEBUG
+			cout << "closing connection to: "<<other_users[i].ip_address<<endl;
+		#endif
 	}
 
 	//finally clear the other_users vector
@@ -353,8 +359,7 @@ void *listenForConnections(void *input) {
 			perror("turning NONBLOCKING on failed\n");
 		}
 
-		//TODO if were're in the correct group, add the info to
-		//other_users
+		//if were're in the correct group, add the info to other_users
 		user temp_user;
 		temp_user.sockfd = connfd;
 		temp_user.sockaddr = cliaddr;
@@ -476,6 +481,7 @@ int main(int argc, char **argv)
 			else if(input == "quit"){
 				printf("Bye!\n");
 				//- exit the program, closing all group connections.
+				close(sockfd);
 				exit(1);
 			}
 			else {
@@ -491,6 +497,7 @@ int main(int argc, char **argv)
 
 					if(input=="quit") { //assuming everything closed correctly, now quit 
 						printf("Bye!\n");
+						close(sockfd);
 						exit(1);
 					}
 					else { //'leave'
